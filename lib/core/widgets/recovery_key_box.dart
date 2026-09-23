@@ -4,10 +4,10 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/constants/app_info.dart';
-import '../../../../core/theme/app_palette.dart';
-import '../../../../core/theme/app_tokens.dart';
-import '../../../../core/widgets/feedback.dart';
+import '../constants/app_info.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
+import 'feedback.dart';
 
 /// Shows the recovery key in large monospace groups with Copy and Save.
 class RecoveryKeyBox extends StatelessWidget {

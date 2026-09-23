@@ -9,6 +9,7 @@ import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/window_title_bar.dart';
+import '../../auth/application/recovery_key_service.dart';
 import '../../items/application/items_controller.dart';
 import '../../items/domain/protected_item.dart';
 import '../../items/presentation/items_page.dart';
@@ -31,6 +32,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _reportRecovery());
+    // Vaults still sealed to an older recovery key can be updated now that
+    // the keys are in memory (after a key change that didn't reach them).
+    unawaited(ref.read(recoveryKeyServiceProvider).updateVaultsIfPending());
   }
 
   /// Tells the user about operations that were finished or rolled back

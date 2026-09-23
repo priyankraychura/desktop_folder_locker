@@ -52,6 +52,16 @@ class PasswordChange {
   final List<RekeyOutcome> failedVaults;
 }
 
+/// A new recovery key that is not saved yet: the user must confirm they
+/// wrote it down first.
+class RecoveryKeyDraft {
+  const RecoveryKeyDraft({required this.text, required this.publicKey});
+
+  /// Shown to the user once; never stored.
+  final String text;
+  final Uint8List publicKey;
+}
+
 /// Master password logic: setup, verification, change and reset.
 class AuthService {
   AuthService({
@@ -90,6 +100,7 @@ class AuthService {
       hint: _cleanHint(hint),
       createdAt: now,
       passwordChangedAt: now,
+      recoveryCreatedAt: now,
     );
     await _repository.save(keystore);
     final text = recovery.format();
@@ -158,6 +169,42 @@ class AuthService {
       masterKey: masterKey,
       failedVaults: outcomes.where((o) => !o.success).toList(),
     );
+  }
+
+  /// Creates a new recovery key (not saved yet).
+  RecoveryKeyDraft newRecoveryKey() {
+    final recovery = RecoveryKey.generate(_crypto);
+    final pair = recovery.keyPair(_crypto);
+    final publicKey = Uint8List.fromList(pair.publicKey);
+    pair.dispose();
+    final text = recovery.format();
+    recovery.dispose();
+    return RecoveryKeyDraft(text: text, publicKey: publicKey);
+  }
+
+  /// Makes [draft] the recovery key. From now on only it can reset the
+  /// master password; vaults still have to be sealed to it.
+  Future<Keystore> saveRecoveryKey(
+    Keystore keystore,
+    RecoveryKeyDraft draft,
+  ) async {
+    final updated = keystore.copyWith(
+      recoveryPublicKey: draft.publicKey,
+      recoveryCreatedAt: DateTime.now(),
+      recoveryUpdatePending: true,
+    );
+    await _repository.save(updated);
+    return updated;
+  }
+
+  Future<Keystore> setRecoveryUpdatePending(
+    Keystore keystore, {
+    required bool pending,
+  }) async {
+    if (keystore.recoveryUpdatePending == pending) return keystore;
+    final updated = keystore.copyWith(recoveryUpdatePending: pending);
+    await _repository.save(updated);
+    return updated;
   }
 
   ({Uint8List nonce, Uint8List cipherText}) _makeVerifier(DerivedKey key) {

@@ -12,6 +12,7 @@ import 'format/key_slot.dart';
 import 'operations/lock_operation.dart';
 import 'operations/operation_progress.dart';
 import 'operations/rekey_operation.dart';
+import 'operations/reseal_operation.dart';
 import 'operations/unlock_operation.dart';
 import 'vault/vault_keys.dart';
 
@@ -40,6 +41,28 @@ class RekeyOutcome {
   final EngineException? error;
 
   bool get success => error == null;
+}
+
+/// A vault to seal to a new recovery key, with a key that opens it when the
+/// app has one (without it, the vault is only checked).
+class ResealTarget {
+  const ResealTarget(this.vaultPath, [this.credential]);
+
+  final String vaultPath;
+  final DerivedKeyCredential? credential;
+}
+
+/// Outcome of sealing one vault to a new recovery key.
+class ResealOutcome {
+  const ResealOutcome({required this.vaultPath, this.result, this.error});
+
+  final String vaultPath;
+  final ResealResult? result;
+  final EngineException? error;
+
+  /// Whether the vault now opens with the new recovery key.
+  bool get isCurrent =>
+      result == ResealResult.alreadyCurrent || result == ResealResult.updated;
 }
 
 /// Runs engine operations in background isolates, so the UI never freezes.
@@ -94,6 +117,22 @@ class EngineRunner {
       _toTransfer(newMaster)!,
       recoveryPublicKey,
     ),
+  ).result;
+
+  /// Seals every vault in [targets] to [recoveryPublicKey].
+  Future<List<ResealOutcome>> resealRecovery({
+    required List<ResealTarget> targets,
+    required Uint8List recoveryPublicKey,
+  }) => _start(
+    _ResealSpec([
+      for (final target in targets)
+        (
+          target.vaultPath,
+          target.credential == null
+              ? null
+              : _credentialToTransfer(target.credential!),
+        ),
+    ], recoveryPublicKey),
   ).result;
 
   // ---------------------------------------------------------------------
@@ -385,6 +424,50 @@ final class _RekeySpec extends _JobSpec<List<RekeyOutcome>> {
         vaultPath: path,
         error: EngineException(EngineErrorCode.ioError, error.toString()),
       );
+    }
+  }
+}
+
+final class _ResealSpec extends _JobSpec<List<ResealOutcome>> {
+  const _ResealSpec(this.targets, this.recoveryPublicKey);
+
+  final List<(String, _TransferCredential?)> targets;
+  final Uint8List recoveryPublicKey;
+
+  @override
+  List<ResealOutcome> run(_WorkerContext context) {
+    final operation = ResealOperation(context.crypto);
+    return [
+      for (final (path, credential) in targets)
+        _resealOne(operation, context, path, credential),
+    ];
+  }
+
+  ResealOutcome _resealOne(
+    ResealOperation operation,
+    _WorkerContext context,
+    String path,
+    _TransferCredential? transfer,
+  ) {
+    final credential = transfer == null ? null : context.credential(transfer);
+    try {
+      return ResealOutcome(
+        vaultPath: path,
+        result: operation.run(
+          vaultPath: path,
+          recoveryPublicKey: recoveryPublicKey,
+          credential: credential,
+        ),
+      );
+    } on EngineException catch (error) {
+      return ResealOutcome(vaultPath: path, error: error);
+    } on Object catch (error) {
+      return ResealOutcome(
+        vaultPath: path,
+        error: EngineException(EngineErrorCode.ioError, error.toString()),
+      );
+    } finally {
+      if (credential is DerivedKeyCredential) credential.key.dispose();
     }
   }
 }

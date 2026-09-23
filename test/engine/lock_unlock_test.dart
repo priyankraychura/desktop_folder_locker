@@ -9,6 +9,7 @@ import 'package:desktop_folder_locker/engine/operations/journal.dart';
 import 'package:desktop_folder_locker/engine/operations/lock_operation.dart';
 import 'package:desktop_folder_locker/engine/operations/operation_progress.dart';
 import 'package:desktop_folder_locker/engine/operations/rekey_operation.dart';
+import 'package:desktop_folder_locker/engine/operations/reseal_operation.dart';
 import 'package:desktop_folder_locker/engine/operations/unlock_operation.dart';
 import 'package:desktop_folder_locker/engine/vault/vault_keys.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -212,6 +213,51 @@ void main() {
     final header = VaultHeader.read(result.vaultPath, env.crypto);
     expect(header.slots.whereType<RecoveryKeySlot>(), hasLength(1));
     final unlocked = unlock(result.vaultPath, const PasswordCredential('new'));
+    expectSameTree(before, snapshotTree(unlocked.restoredPath));
+  });
+
+  test('reseal switches a vault to a new recovery key', () {
+    final oldKey = RecoveryKey.generate(env.crypto);
+    final newKey = RecoveryKey.generate(env.crypto);
+    final newPublicKey = newKey.keyPair(env.crypto).publicKey;
+    final master = env.derive('master');
+    final folder = env.createSampleFolder('Item');
+    final before = snapshotTree(folder.path);
+    final result = lock(
+      folder.path,
+      VaultSlotsSpec(
+        master: master,
+        recoveryPublicKey: oldKey.keyPair(env.crypto).publicKey,
+      ),
+    );
+    final reseal = ResealOperation(env.crypto);
+
+    // Without a key the vault can only be checked.
+    expect(
+      reseal.run(vaultPath: result.vaultPath, recoveryPublicKey: newPublicKey),
+      ResealResult.needsKey,
+    );
+    expect(
+      reseal.run(
+        vaultPath: result.vaultPath,
+        recoveryPublicKey: newPublicKey,
+        credential: DerivedKeyCredential(master, KeySlotType.masterPassword),
+      ),
+      ResealResult.updated,
+    );
+    expect(
+      reseal.run(vaultPath: result.vaultPath, recoveryPublicKey: newPublicKey),
+      ResealResult.alreadyCurrent,
+    );
+
+    expect(
+      () => unlock(result.vaultPath, RecoveryCredential(oldKey)),
+      throwsEngine(EngineErrorCode.wrongPassword),
+    );
+    final header = VaultHeader.read(result.vaultPath, env.crypto);
+    expect(header.slots.whereType<RecoveryKeySlot>(), hasLength(1));
+    expect(header.slots.whereType<PasswordKeySlot>(), hasLength(1));
+    final unlocked = unlock(result.vaultPath, RecoveryCredential(newKey));
     expectSameTree(before, snapshotTree(unlocked.restoredPath));
   });
 

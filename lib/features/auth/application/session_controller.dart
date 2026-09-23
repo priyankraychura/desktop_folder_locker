@@ -120,6 +120,14 @@ class SessionController extends Notifier<SessionState> {
     return key != null;
   }
 
+  /// Replaces the stored keystore, for example after a new recovery key
+  /// was saved. Keeps the session as it is.
+  void updateKeystore(Keystore keystore) => state = SessionState(
+    status: state.status,
+    keystore: keystore,
+    masterKey: state.masterKey,
+  );
+
   /// Locks the app and wipes every key from memory.
   void lock() {
     if (state.status != SessionStatus.unlocked) return;

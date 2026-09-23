@@ -7,10 +7,10 @@ import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/buttons.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/new_password_fields.dart';
+import '../../../core/widgets/recovery_key_box.dart';
 import '../../../core/widgets/window_title_bar.dart';
 import '../../auth/application/session_controller.dart';
 import 'widgets/onboarding_hero.dart';
-import 'widgets/recovery_key_box.dart';
 
 /// First-run onboarding: create the master password, then save the
 /// recovery key.

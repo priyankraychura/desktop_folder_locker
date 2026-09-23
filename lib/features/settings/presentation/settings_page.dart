@@ -16,6 +16,7 @@ import '../../../platform/explorer_integration.dart';
 import '../../../platform/shell_actions.dart';
 import '../../auth/application/session_controller.dart';
 import '../../auth/presentation/password_dialogs.dart';
+import '../../auth/presentation/recovery_key_dialog.dart';
 import '../application/settings_controller.dart';
 import '../domain/app_settings.dart';
 
@@ -149,13 +150,34 @@ class SettingsPage extends ConsumerWidget {
               title: 'Recovery key',
               subtitle: keystore == null
                   ? null
-                  : 'Created ${Format.relative(keystore.createdAt)}. It can '
-                        'reset your master password and open any item. '
-                        'Keep it somewhere safe.',
-              trailing: const StatusBadge(
-                tone: Tone.success,
-                icon: Icons.check_rounded,
-                label: 'Active',
+                  : keystore.recoveryUpdatePending
+                  ? 'Created ${Format.relative(keystore.recoveryCreatedAt)}. '
+                        'Some locked items still open only with your '
+                        'previous key; they switch when you unlock them.'
+                  : 'Created ${Format.relative(keystore.recoveryCreatedAt)}. '
+                        'It can reset your master password and open any '
+                        'item. Keep it somewhere safe.',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (keystore?.recoveryUpdatePending ?? false)
+                    const StatusBadge(
+                      tone: Tone.warning,
+                      icon: Icons.sync_rounded,
+                      label: 'Updating',
+                    )
+                  else
+                    const StatusBadge(
+                      tone: Tone.success,
+                      icon: Icons.check_rounded,
+                      label: 'Active',
+                    ),
+                  const SizedBox(width: AppSpacing.md),
+                  OutlinedButton(
+                    onPressed: () => showNewRecoveryKeyDialog(context),
+                    child: const Text('New key…'),
+                  ),
+                ],
               ),
             ),
           ],
