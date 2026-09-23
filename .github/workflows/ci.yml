@@ -108,7 +108,7 @@ jobs:
         env:
           FLK_SHELL_E2E: '1'
           RUST_BACKTRACE: '1'
-        run: cargo test --release -p folder-locker-shell -- --nocapture
+        run: cargo test --release -p folder-locker-shell --no-fail-fast -- --nocapture
 
       - name: Build the drive helper and the Explorer plug-in
         working-directory: native
