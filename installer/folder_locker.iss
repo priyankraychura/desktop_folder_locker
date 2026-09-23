@@ -170,8 +170,8 @@ begin
     DokanyNeedsRestart := True
   else if not Started or (ResultCode <> 0) then
     SuppressibleMsgBox(
-      'Dokany could not be installed (code ' + IntToStr(ResultCode) + ').' +
-      #13#10 + #13#10 +
+      'Dokany could not be installed (code ' + IntToStr(ResultCode) +
+      ').' + #13#10 + #13#10 +
       'Everything else works. To open encrypted folders as drives, install ' +
       'Dokany later in {#AppName}: Settings, Encrypted drives.' + #13#10 +
       'Details: ' + LogFile,

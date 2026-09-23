@@ -8,6 +8,7 @@
 // Release builds are started by the app with pipes and need no console.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod decorate;
 mod drives;
 mod header;
 mod jobs;

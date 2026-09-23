@@ -202,13 +202,29 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
     `Name.flkd` is gone.
 13. Change the master password → drive vaults open with the new one.
 
-## Phase 3: Explorer plug-in (C++ shell extension) ⏳
+## Phase 3: Explorer plug-in 🚧
 
-- A locked item can stay a *real folder* in Explorer. Opening it shows the
-  password dialog (shell namespace extension).
-- Lock icon overlay; Windows 11 top-level context menu (`IExplorerCommand`).
-- User-mode DLL: no Microsoft driver signature needed. Signed for free with
-  SignPath if the project is open source (avoids Smart App Control blocks).
+Folder Locker feels built into Explorer: menus that know each item, locked
+items that look locked, and locked folders that ask for the password when
+opened.
+
+| # | Milestone | What it contains | Status |
+|---|-----------|------------------|--------|
+| 3a | Locked drive vault folders | A `Name.flkd` folder shows the vault icon and a tooltip, and inside it only `vault.flk` (the encrypted data is hidden), so opening the folder leads straight to the password dialog. Plain `desktop.ini`: no plug-in or administrator rights needed, and it travels with the vault to other PCs | ⏳ |
+| 3b | Explorer plug-in | `folder_locker_shell.dll`, a user-mode COM server in Rust: no driver, no signature needed to run. Never blocks or crashes Explorer: it only reads the app's list of items, and every entry point catches errors | ⏳ |
+| 3c | Right-click menu that knows the item | One entry whose title and action follow the item: *Lock with Folder Locker* on folders and files, *Unlock…* on locked items and `.flk` vaults, *Open…* on drive vaults, *Lock…* on unlocked items and on open drives (right-click `V:`). Registered per user, so no administrator rights. Top level on Windows 10; under *Show more options* on Windows 11 | ⏳ |
+| 3d | Lock badge | A padlock overlay on items that stay in place while protected (Block access, Read-only). Registered for all users (installer); Windows shows at most 15 overlays, and cloud apps use many | ⏳ |
+| 3e | Windows 11 first-level menu | The same command in a package with external location (sparse package), which Windows 11 needs for its first menu level. Built and checked in CI with a test certificate; switched on in the installer with the free signing of Phase 4 | ⏳ |
+
+**Changes from the first plan**
+
+- **Rust instead of C++** for the plug-in, like the drive helper: one native
+  toolchain, and memory safety matters most inside Explorer's own process.
+- **No namespace extension.** Making a folder behave like a virtual folder
+  inside Explorer is a large amount of fragile shell code, and a bug there
+  breaks Explorer itself. Drive vaults already get the same result more
+  simply: their folder shows the vault icon, contains only `vault.flk`, and
+  opening that asks for the password and shows the files as a drive.
 
 ## Phase 4: publishing ⏳
 

@@ -23,3 +23,6 @@ winapi = { version = "0.3", features = ["ntstatus", "winnt", "fileapi", "minwinb
 
 [dev-dependencies]
 tempfile = "3"
+
+[target.'cfg(windows)'.dev-dependencies]
+winapi = { version = "0.3", features = ["shellapi", "combaseapi", "objbase"] }

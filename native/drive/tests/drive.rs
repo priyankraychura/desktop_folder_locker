@@ -12,12 +12,18 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+use std::{mem, ptr, thread};
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde_json::{json, Value};
+use widestring::U16CString;
+use winapi::um::combaseapi::CoInitializeEx;
+use winapi::um::fileapi::{GetFileAttributesW, INVALID_FILE_ATTRIBUTES};
+use winapi::um::objbase::COINIT_APARTMENTTHREADED;
+use winapi::um::shellapi::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICONLOCATION};
+use winapi::um::winnt::{FILE_ATTRIBUTE_HIDDEN, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM};
 
 struct Helper {
     child: Child,
@@ -104,6 +110,36 @@ fn unmount_when_free(helper: &mut Helper, vault: &Path) {
     }
 }
 
+fn attributes(path: &Path) -> u32 {
+    let name = U16CString::from_os_str(path.as_os_str()).unwrap();
+    let attributes = unsafe { GetFileAttributesW(name.as_ptr()) };
+    assert_ne!(attributes, INVALID_FILE_ATTRIBUTES, "{}", path.display());
+    attributes
+}
+
+/// The icon Explorer shows for a folder.
+fn icon_location(path: &Path) -> String {
+    unsafe { CoInitializeEx(ptr::null_mut(), COINIT_APARTMENTTHREADED) };
+    let name = U16CString::from_os_str(path.as_os_str()).unwrap();
+    let mut info: SHFILEINFOW = unsafe { mem::zeroed() };
+    let found = unsafe {
+        SHGetFileInfoW(
+            name.as_ptr(),
+            0,
+            &mut info,
+            mem::size_of::<SHFILEINFOW>() as u32,
+            SHGFI_ICONLOCATION,
+        )
+    };
+    assert_ne!(found, 0, "no icon for {}", path.display());
+    let length = info
+        .szDisplayName
+        .iter()
+        .position(|&c| c == 0)
+        .unwrap_or(info.szDisplayName.len());
+    String::from_utf16_lossy(&info.szDisplayName[..length])
+}
+
 fn wait_until_gone(drive: &Path) {
     let started = Instant::now();
     while drive.exists() && started.elapsed() < Duration::from_secs(10) {
@@ -156,6 +192,17 @@ fn mounts_a_vault_as_a_drive() {
         "source": source,
     }));
     assert_eq!(imported["files"], 2);
+
+    // The vault folder looks locked in Explorer, with only vault.flk in
+    // sight.
+    assert!(vault.join("desktop.ini").exists());
+    assert_ne!(attributes(&vault) & FILE_ATTRIBUTE_READONLY, 0);
+    for hidden in ["data", "desktop.ini", "folder.ico"] {
+        let wanted = FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
+        assert_eq!(attributes(&vault.join(hidden)) & wanted, wanted, "{hidden}");
+    }
+    let icon = icon_location(&vault);
+    assert!(icon.to_lowercase().ends_with("folder.ico"), "{icon}");
 
     let drive = helper.mount(&vault, &key);
     let at = |path: &str| drive.join(path);

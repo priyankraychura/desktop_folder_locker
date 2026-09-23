@@ -38,6 +38,15 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      # Inno Setup's preprocessor takes any line that starts with "#" as a
+      # directive, so a Pascal "#13#10" must never start a line.
+      - name: Check the installer script
+        run: |
+          if grep -nE '^\s*#[0-9$]' installer/*.iss; then
+            echo "A line in the installer script starts with a character code"
+            exit 1
+          fi
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: native

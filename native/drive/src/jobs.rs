@@ -11,6 +11,7 @@ use flk_vault2::tree::{self, TreeStats};
 use flk_vault2::Vault;
 use serde_json::{json, Value};
 
+use crate::decorate;
 use crate::header::{VaultHeader, DATA_DIR};
 use crate::protocol::{Failure, Output};
 
@@ -136,6 +137,8 @@ pub fn import(
     tree::import(&vault, source, &mut |done| copy.report(done))?;
     let mut check = Reporter::new(out, id, "verify", stats.bytes, cancel);
     tree::verify(&vault, source, &mut |done| check.report(done))?;
+    // Only its look: the vault is complete without it.
+    let _ = decorate::decorate(vault_dir);
     Ok(stats_json(stats))
 }
 

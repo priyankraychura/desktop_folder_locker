@@ -53,9 +53,11 @@ Code map:
 ## 2. On disk
 
 ```text
-Taxes.flkd\
+Taxes.flkd\              read-only attribute, so Explorer reads desktop.ini
   vault.flk              header and key slots (4096 bytes)
-  data\
+  desktop.ini            the folder's icon and tooltip (hidden)
+  folder.ico             the vault icon (hidden)
+  data\                  (hidden)
     dir.iv               random IV for the names in this folder (16 bytes)
     key.check            tells a wrong key right away (32 bytes)
     3kR…w                a file (encrypted name)
@@ -68,6 +70,14 @@ Taxes.flkd\
 
 The folder tree has the same shape as the original: one stored file per
 file and one stored folder per folder.
+
+`desktop.ini` and `folder.ico` are only the folder's look in Explorer: the
+vault icon, a tooltip, and nothing but `vault.flk` in sight (the other
+entries are hidden system files, which Explorer doesn't show by default).
+So opening the folder leads straight to the password dialog, on any PC,
+without the app's Explorer plug-in. The helper writes them after an import,
+and again when it opens a vault made before they existed. The vault works
+without them.
 
 ### 2.1 Header (`vault.flk`)
 

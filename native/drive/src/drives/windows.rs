@@ -15,6 +15,7 @@ use zeroize::Zeroize;
 
 use super::handler::Handler;
 use super::MountRequest;
+use crate::decorate;
 use crate::header::{VaultHeader, DATA_DIR};
 use crate::protocol::{Failure, Output};
 
@@ -199,6 +200,8 @@ impl Drives {
 
         match ready_rx.recv_timeout(MOUNT_TIMEOUT) {
             Ok(Ok(())) => {
+                // Vaults made before folders got their look get it now.
+                let _ = decorate::decorate(&request.vault);
                 if let Some(mount) = lock(&self.mounts).get_mut(&key) {
                     mount.ready = true;
                     return Ok(
