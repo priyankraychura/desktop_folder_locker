@@ -169,4 +169,5 @@ jobs:
         working-directory: native
         env:
           FLK_REQUIRE_DOKANY: '1'
+          RUST_BACKTRACE: '1'
         run: cargo test --workspace -- --nocapture

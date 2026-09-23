@@ -133,8 +133,6 @@ dependencies = [
 [[package]]
 name = "dokan"
 version = "0.3.1+dokan206"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2559899e13c4d1c2ad38fa09be2daf9cde88ff4b70495a70ce4aa371b3b3b1a"
 dependencies = [
  "bitflags 1.3.2",
  "dokan-sys",
@@ -145,6 +143,8 @@ dependencies = [
 [[package]]
 name = "dokan-sys"
 version = "0.3.1+dokan206"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb7e49e8ac8b6867cd04fc1869a54d4bb32b680180ff2f86d695ef1955534668"
 dependencies = [
  "cc",
  "libc",

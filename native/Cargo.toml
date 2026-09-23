@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["vault2", "drive"]
+exclude = ["vendor"]
 
 [workspace.package]
 version = "1.2.0"
@@ -11,5 +12,12 @@ publish = false
 opt-level = 3
 lto = "thin"
 codegen-units = 1
-panic = "abort"
+# A panic inside a Dokany callback becomes an error status for that one
+# request (the dokan crate catches it) instead of closing every drive.
+panic = "unwind"
 strip = true
+
+[patch.crates-io]
+# dokan 0.3.1 with a fix for requests on handles it didn't open, which
+# crashed the drive (see vendor/dokan/PATCHES.md).
+dokan = { path = "vendor/dokan" }

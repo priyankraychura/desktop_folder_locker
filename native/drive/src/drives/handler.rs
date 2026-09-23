@@ -59,6 +59,9 @@ const MAX_LABEL: usize = 32;
 
 pub struct Handler {
     vault: Vault,
+    /// The context of handles Dokany opened itself (see
+    /// [`FileSystemHandler::default_context`]); they are resolved by name.
+    unopened: Handle,
     label: U16CString,
     serial: u32,
     ready: mpsc::Sender<Result<(), Failure>>,
@@ -69,6 +72,8 @@ pub struct Handler {
 /// What an open handle on the drive refers to.
 pub enum Handle {
     File(Arc<ContentFile>),
+    /// A folder, or a handle Dokany opened itself: both are looked up by
+    /// name for each request.
     Dir,
 }
 
@@ -87,6 +92,7 @@ impl Handler {
         let data_dir = U16CString::from_os_str(vault.data_dir().as_os_str()).unwrap_or_default();
         Self {
             vault,
+            unopened: Handle::Dir,
             label: U16CString::from_str(label).unwrap_or_default(),
             serial,
             ready,
@@ -119,6 +125,10 @@ impl Handler {
 
 impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for Handler {
     type Context = Handle;
+
+    fn default_context(&'h self) -> Option<&'c Self::Context> {
+        Some(&self.unopened)
+    }
 
     fn create_file(
         &'h self,
@@ -308,10 +318,11 @@ impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for Handler {
             }
             Handle::Dir => {
                 let item = self.existing(file_name)?;
-                let info = open_dir(&item.stored_path)
-                    .and_then(|dir| handle_info(&dir))
+                let size = self.vault.file_len(&item).map_err(status)?;
+                let info = open_stored(&item.stored_path)
+                    .and_then(|stored| handle_info(&stored))
                     .map_err(|e| io_status(&e))?;
-                Ok(file_info(&info, 0, true))
+                Ok(file_info(&info, size, item.is_dir))
             }
         }
     }
@@ -599,7 +610,8 @@ fn handle_info(file: &File) -> io::Result<BY_HANDLE_FILE_INFORMATION> {
     Ok(info)
 }
 
-fn open_dir(path: &Path) -> io::Result<File> {
+/// Opens a stored folder (or file) only to read its information.
+fn open_stored(path: &Path) -> io::Result<File> {
     OpenOptions::new()
         .access_mode(FILE_READ_ATTRIBUTES)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
