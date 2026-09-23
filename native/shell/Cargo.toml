@@ -1,0 +1,47 @@
+[package]
+name = "folder-locker-shell"
+description = "Folder Locker's Explorer plug-in: the right-click menu and the lock badge."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+name = "folder_locker_shell"
+# The DLL for Explorer, and a library for the tests.
+crate-type = ["cdylib", "rlib"]
+
+# Stands in for the app in the tests: writes its arguments to a file.
+[[bin]]
+name = "flk-record-args"
+path = "src/bin/record_args.rs"
+test = false
+doc = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-core = "0.62"
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.62", features = [
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[build-dependencies]
+static_vcruntime = "2"

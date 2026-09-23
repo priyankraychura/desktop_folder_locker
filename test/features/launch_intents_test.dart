@@ -19,6 +19,17 @@ void main() {
       );
     });
 
+    test('reads --unlock', () {
+      expect(
+        LaunchIntent.parse(['--unlock', r'D:\Music']),
+        isA<UnlockPathIntent>().having((i) => i.path, 'path', r'D:\Music'),
+      );
+      expect(
+        LaunchIntent.parse(['--unlock', r'C:\Docs\Secret.flk']),
+        isA<OpenVaultIntent>(),
+      );
+    });
+
     test('"lock" on a vault file means unlock it', () {
       expect(
         LaunchIntent.parse(['--lock', r'C:\Docs\Secret.FLK']),

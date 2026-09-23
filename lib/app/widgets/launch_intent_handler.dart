@@ -15,10 +15,12 @@ import '../../features/items/presentation/item_actions.dart';
 import '../../features/shell/application/launch_intents.dart';
 
 /// Handles requests from Explorer ("unlock this vault", "lock this
-/// folder") one at a time, as soon as the app is ready for them.
+/// folder", "unlock this folder") one at a time, as soon as the app is
+/// ready for them.
 ///
 /// Opening a vault works even while the app is locked (the vault's own
-/// password is asked); locking needs the app to be unlocked first.
+/// password is asked); locking and unlocking items need the app to be
+/// unlocked first.
 class LaunchIntentHandler extends ConsumerStatefulWidget {
   const LaunchIntentHandler({required this.child, super.key});
 
@@ -69,7 +71,9 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
         case OpenVaultIntent(:final path):
           await actions.openVault(path);
         case LockPathIntent(:final path):
-          await actions.protectPath(path);
+          await actions.lockPath(path);
+        case UnlockPathIntent(:final path):
+          await actions.unlockPath(path);
       }
     } finally {
       _handling = false;
@@ -77,17 +81,26 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
     _schedule();
   }
 
-  /// Tells the user once that a "lock" request waits for the app unlock.
+  /// Tells the user once about each request that waits for the app to be
+  /// unlocked (in one message: a new message replaces the last one).
   void _notifyWaiting() {
-    for (final intent in ref.read(launchIntentsProvider)) {
-      if (intent is LockPathIntent && _waitingNotified.add(intent.path)) {
-        showToast(
-          'Unlock the app to lock “${p.basename(intent.path)}”.',
-          tone: Tone.info,
-        );
-      }
-    }
+    final waiting = [
+      for (final intent in ref.read(launchIntentsProvider))
+        if (_verb(intent) case final verb?
+            when _waitingNotified.add('$verb ${intent.path}'))
+          (verb, p.basename(intent.path)),
+    ];
+    if (waiting.isEmpty) return;
+    final (verb, name) = waiting.first;
+    final more = waiting.length > 1 ? ' and ${waiting.length - 1} more' : '';
+    showToast('Unlock the app to $verb “$name”$more.', tone: Tone.info);
   }
+
+  static String? _verb(LaunchIntent intent) => switch (intent) {
+    LockPathIntent() => 'lock',
+    UnlockPathIntent() => 'unlock',
+    OpenVaultIntent() => null,
+  };
 
   Future<void> _bringToFront() async {
     if (!ref.read(nativeWindowProvider)) return;

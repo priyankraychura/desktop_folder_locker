@@ -1,16 +1,17 @@
 ; Inno Setup script for Folder Locker (https://jrsoftware.org/isinfo.php).
 ;
-; Build the drive helper and the app, and fetch Dokany, then compile this
-; script:
+; Build the drive helper, the Explorer plug-in and the app, and fetch
+; Dokany, then compile this script:
 ;
-;   cargo build --release -p folder-locker-drive     (in native\)
-;   flutter build windows --release                  (copies the helper)
+;   cargo build --release -p folder-locker-drive -p folder-locker-shell   (in native\)
+;   flutter build windows --release                  (copies both next to the app)
 ;   pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
 ;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\folder_locker.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml). Without the Dokany step, the installer links to
-; the Dokany download instead of installing it.
+; the Dokany download instead of installing it. Without the plug-in, the
+; right-click entry is the plain "Lock with Folder Locker".
 ;
 ; It installs for all users into Program Files (one administrator prompt),
 ; or, if the user chooses, for them only into %LOCALAPPDATA%\Programs
@@ -29,9 +30,16 @@
 #define VaultIconId "102"
 ; Dokany's installer, next to the app (see get-dokany.ps1).
 #define DokanyMsi "dokany\Dokan_x64.msi"
+; The Explorer plug-in (native\shell) and its class id (CLSID_MENU in
+; native\shell\src\com.rs). In sections, "{{" stands for "{".
+#define ShellDll "folder_locker_shell.dll"
+#define ShellClsid "{{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}"
 
 #if FileExists(AddBackslash(SourcePath) + BuildDir + "\" + DokanyMsi)
   #define BundleDokany
+#endif
+#if FileExists(AddBackslash(SourcePath) + BuildDir + "\" + ShellDll)
+  #define ShellPlugin
 #endif
 
 #ifndef AppVersion
@@ -69,8 +77,10 @@ UninstallDisplayName={#AppName}
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
-; Close a running copy before replacing its files.
+; Close a running copy before replacing its files. Not Explorer, which
+; loads the plug-in: see MovePluginAway in [Code].
 CloseApplications=yes
+CloseApplicationsFilter=*.exe,*.chm
 RestartApplications=no
 ; Tell Explorer to refresh file icons after the .flk association changes.
 ChangesAssociations=yes
@@ -86,7 +96,11 @@ Name: "dokany"; Description: "Install Dokany, a free driver that opens encrypted
 #endif
 
 [Files]
-Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#BuildDir}\*"; DestDir: "{app}"; Excludes: "\{#ShellDll}"; Flags: ignoreversion recursesubdirs createallsubdirs
+#ifdef ShellPlugin
+; Explorer may have it loaded: see MovePluginAway in [Code].
+Source: "{#BuildDir}\{#ShellDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete
+#endif
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -103,13 +117,32 @@ Root: HKCU; Subkey: "Software\Classes\{#VaultProgId}\DefaultIcon"; ValueType: st
 Root: HKCU; Subkey: "Software\Classes\{#VaultProgId}\shell"; ValueType: string; ValueName: ""; ValueData: "open"
 Root: HKCU; Subkey: "Software\Classes\{#VaultProgId}\shell\open"; ValueType: string; ValueName: ""; ValueData: "Unlock with {#AppName}"
 Root: HKCU; Subkey: "Software\Classes\{#VaultProgId}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" --open ""%1"""
-; "Lock with Folder Locker" in the right-click menu of folders and files.
+; The right-click entry (written anew: see RemoveExplorerEntry in [Code]).
+#ifdef ShellPlugin
+; The Explorer plug-in's entry on folders, files and drives, which follows
+; each item: Lock, Unlock or Open with Folder Locker.
+Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}"; ValueType: string; ValueName: ""; ValueData: "{#AppName} Explorer plug-in"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}\InprocServer32"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ShellDll}"
+Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}\InprocServer32"; ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: "ExplorerCommandHandler"; ValueData: "{#ShellClsid}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}"; ValueType: string; ValueName: "ExplorerCommandHandler"; ValueData: "{#ShellClsid}"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Drive\shell\{#LockVerb}"; ValueType: string; ValueName: "ExplorerCommandHandler"; ValueData: "{#ShellClsid}"; Flags: uninsdeletekey
+#else
+; "Lock with Folder Locker" on folders and files.
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: ""; ValueData: "Lock with {#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#AppExeName}"",0"
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" --lock ""%1"""
 Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}"; ValueType: string; ValueName: ""; ValueData: "Lock with {#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#AppExeName}"",0"
 Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" --lock ""%1"""
+#endif
+
+[InstallDelete]
+; Copies of the plug-in that were in use last time (see MovePluginAway).
+Type: files; Name: "{app}\{#ShellDll}.*.old"
+
+[UninstallDelete]
+Type: files; Name: "{app}\{#ShellDll}.*.old"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
@@ -178,17 +211,74 @@ begin
       mbInformation, MB_OK, IDOK);
 end;
 
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if (CurStep = ssPostInstall) and WizardIsTaskSelected('dokany') then
-    InstallDokany;
-end;
-
 function NeedRestart(): Boolean;
 begin
   Result := DokanyNeedsRestart;
 end;
 #endif
+
+{ Removes the right-click entry of this or another version (with or
+  without the plug-in), so that [Registry] writes it anew, like the app
+  does. }
+procedure RemoveExplorerEntry;
+begin
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\Directory\shell\{#LockVerb}');
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\*\shell\{#LockVerb}');
+  RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\Drive\shell\{#LockVerb}');
+  RegDeleteKeyIncludingSubkeys(HKCU,
+    ExpandConstant('Software\Classes\CLSID\{#ShellClsid}'));
+end;
+
+{ Explorer keeps the plug-in loaded while it's in use, and a loaded DLL
+  can't be replaced or deleted. It can be renamed, though: Explorer goes on
+  with the old copy until it restarts, and loads the new one next time. The
+  old copy goes to the temporary folder (or stays next to the app, see
+  [InstallDelete]), and is deleted when Windows restarts where Setup may
+  do that. So neither updating nor uninstalling needs a restart. }
+procedure MovePluginAway;
+var
+  Dll, Stamp, Old: String;
+  Moved: Boolean;
+begin
+  Dll := ExpandConstant('{app}\{#ShellDll}');
+  if not FileExists(Dll) or DeleteFile(Dll) then
+    Exit;
+  Stamp := GetDateTimeString('yyyymmddhhnnsszzz', #0, #0);
+  Old := ExpandConstant('{%TEMP}\FolderLocker-plugin-') + Stamp + '.dll.old';
+  Moved := RenameFile(Dll, Old);
+  if not Moved then
+  begin
+    Old := Dll + '.' + Stamp + '.old';
+    Moved := RenameFile(Dll, Old);
+  end;
+  if Moved then
+  begin
+    Log('The Explorer plug-in was in use. Moved it to ' + Old);
+    if IsAdmin then
+      RestartReplace(Old, '');
+  end
+  else
+    Log('The Explorer plug-in is in use and could not be moved.');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+  begin
+    RemoveExplorerEntry;
+    MovePluginAway;
+  end;
+#ifdef BundleDokany
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('dokany') then
+    InstallDokany;
+#endif
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usUninstall then
+    MovePluginAway;
+end;
 
 function InitializeUninstall(): Boolean;
 begin

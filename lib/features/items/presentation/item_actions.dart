@@ -47,11 +47,43 @@ class ItemActions {
     if (path != null) await protectPath(path);
   }
 
+  /// Explorer's "Lock with…": protects a new item, or locks a listed one
+  /// again.
+  Future<void> lockPath(String path) async {
+    final existing = _ref.read(itemsControllerProvider.notifier).byPath(path);
+    if (existing != null &&
+        !existing.isProtected &&
+        _ref.read(sessionControllerProvider).isUnlocked) {
+      return lockAgain(existing);
+    }
+    return protectPath(path);
+  }
+
+  /// Explorer's "Unlock with…" on a listed item.
+  Future<void> unlockPath(String path) async {
+    if (!_ref.read(sessionControllerProvider).isUnlocked) {
+      showToast('Unlock the app first.', tone: Tone.warning);
+      return;
+    }
+    final item = _ref.read(itemsControllerProvider.notifier).byPath(path);
+    if (item == null) {
+      showToast(
+        '“${p.basename(path)}” is not in your list.',
+        tone: Tone.warning,
+      );
+    } else if (!item.isProtected) {
+      showToast('“${item.name}” is already unlocked.');
+    } else {
+      await unlock(item);
+    }
+  }
+
   /// Protects [path] after asking how (method, hiding, which password).
   ///
-  /// For an item that is already in the list (for example when Explorer's
-  /// "Lock with…" is used on a blocked folder), offers to unlock it or
-  /// locks it again instead.
+  /// For an item that is already in the list (for example when a folder is
+  /// dropped on the app again, or when Explorer's "Lock with…" of an older
+  /// setup is used on a blocked folder), offers to unlock it or to lock it
+  /// again instead.
   Future<void> protectPath(String path) async {
     if (!_ref.read(sessionControllerProvider).isUnlocked) {
       showToast('Unlock the app first.', tone: Tone.warning);

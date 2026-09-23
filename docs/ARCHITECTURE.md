@@ -23,7 +23,8 @@ This document explains how Folder Locker is built. It covers:
 │ engine/   vault format + operations (pure Dart + libsodium)   │
 ├──────────────────────────────┬────────────────────────────────┤
 │ platform/ Windows: registry, │ native/ drive helper (Rust,    │
-│ FFI, single instance, shell  │ a separate process) + Dokany   │
+│ FFI, single instance, shell  │ a separate process) + Dokany;  │
+│                              │ Explorer plug-in (Rust DLL)    │
 └──────────────────────────────┴────────────────────────────────┘
 ```
 
@@ -50,6 +51,9 @@ Rules that keep the code consistent:
 - **The drive helper is a separate program.** Only
   `engine/drive/drive_helper.dart` knows how to start and talk to it;
   everything else uses the `DriveService` interface (section 5.3).
+- **The Explorer plug-in only reads and asks.** It reads `items.json` and
+  starts the app with a launch argument; the app does the work, with its
+  usual dialogs and checks (section 7).
 
 ## 2. Startup
 
@@ -71,10 +75,16 @@ While the list of items loads, the journal recovery runs in a background
 isolate. It fixes operations that a crash interrupted (section 5), and the
 home screen reports what it did.
 
-Launch arguments are `--open "<vault>"` and `--lock "<path>"`. They become
-`LaunchIntent`s in a queue, and the `LaunchIntentHandler` widget shows the
-right dialog. If the app is still locked, it asks for the master password
-first.
+Launch arguments are `--open "<vault>"`, `--lock "<path>"` and
+`--unlock "<path>"`. They become `LaunchIntent`s in a queue, and the
+`LaunchIntentHandler` widget runs them one at a time:
+
+- `--open` asks for the vault's password, even while the app is locked.
+- `--lock` protects a new item (the protect dialog), or locks a listed
+  unlocked item again without asking (the user chose it in Explorer).
+- `--unlock` unlocks a listed item.
+
+Locking and unlocking wait until the app is unlocked, and a toast says so.
 
 ## 3. Vault format (`.flk`, version 1)
 
@@ -378,22 +388,55 @@ recovery key.
 
 - **Explorer** (`platform/explorer_integration.dart`, per user under
   `HKCU\Software\Classes`, no admin rights). The installer writes the same
-  keys and removes them on uninstall.
+  keys and removes them on uninstall. At startup the app writes them again
+  if they point elsewhere (the app moved, or the plug-in came or went).
 
   | Key | Value |
   |---|---|
   | `.flk` | `FolderLocker.Vault` |
   | `FolderLocker.Vault\DefaultIcon` | `"<exe>",-102` (vault icon resource) |
   | `FolderLocker.Vault\shell\open\command` | `"<exe>" --open "%1"` |
-  | `Directory\shell\FolderLocker.Lock\command` | `"<exe>" --lock "%1"` |
-  | `*\shell\FolderLocker.Lock\command` | `"<exe>" --lock "%1"` |
+  | `CLSID\{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}\InprocServer32` | `<app folder>\folder_locker_shell.dll`, `ThreadingModel` = `Apartment` |
+  | `Directory`, `*` and `Drive` `\shell\FolderLocker.Lock` | `ExplorerCommandHandler` = the class id above |
 
-  On Windows 11 the "Lock with…" entry appears under **Show more options**.
-  A top-level entry needs a shell extension (Phase 3).
+  Without `folder_locker_shell.dll` next to the app (a development build
+  without it), folders and files get the plain `FolderLocker.Lock` entry
+  instead: "Lock with Folder Locker", `"<exe>" --lock "%1"`.
+
+  On Windows 11 the entry appears under **Show more options**; the first
+  menu level needs a signed package (Phase 3e).
+- **Explorer plug-in** (`native/shell`, `folder_locker_shell.dll`). A
+  small in-process COM server in Rust that implements `IExplorerCommand`,
+  so Explorer asks it for the entry's title and state, and runs it:
+
+  | The item | The entry | The app gets |
+  |---|---|---|
+  | A new folder or file | Lock with Folder Locker | `--lock <path>` |
+  | A listed item that is unlocked | Lock with Folder Locker | `--lock <item>` |
+  | A blocked, read-only or hidden item | Unlock with Folder Locker | `--unlock <item>` |
+  | A drive vault (`.flkd`) that is locked, or not in the list | Open with Folder Locker | `--open <vault>` |
+  | An open drive (`V:`) or its vault folder | Lock with Folder Locker | `--lock <item>` |
+  | A `.flk` file, a whole drive, anything inside a `.flkd` folder or the Recycle Bin, several items | none (`.flk` files have the file type's own "Unlock with…") | |
+
+  It reads `%APPDATA%\FolderLocker\items.json` (which the app replaces in
+  one step), again only when the file changed, and checks at most once a
+  second. Everything else is the app's job: the plug-in only starts
+  `folder_locker.exe` from its own folder, passing none of Explorer's
+  handles. Every entry point catches errors and panics and returns an
+  error code, so a problem in it can't take Explorer down. The release
+  build carries the Visual C++ runtime inside (`static_vcruntime`), so it
+  doesn't depend on whichever `vcruntime140.dll` Explorer has loaded.
+
+  Explorer keeps the DLL loaded for a while after it's used. A loaded DLL
+  can't be replaced, but it can be renamed, so the installer moves it
+  aside first (to `%TEMP%`, deleted at the next restart where Setup may do
+  that): updating and uninstalling need no restart.
 - **Drive vaults.** `vault.flk` inside a `Name.flkd` folder is a `.flk`
   file, so it has the vault icon and double-clicking it asks for the
-  password and opens the drive. "Lock with…" on a `.flkd` folder does the
-  same. The drive itself comes from Dokany through the helper, which loads
+  password and opens the drive. "Open with…" on a `.flkd` folder does the
+  same. The folder shows the vault icon, hides its encrypted data and says
+  what it is in a tooltip, through a `desktop.ini` that the helper writes
+  ([DRIVE_VAULT.md](DRIVE_VAULT.md)). The drive itself comes from Dokany through the helper, which loads
   `dokan2.dll` only from System32.
 - **Hide** sets the Hidden and System attributes (`SetFileAttributesW`
   through FFI). Explorer's default settings then hide the item.
@@ -461,9 +504,9 @@ independently audited**.
 |---|---|
 | `test/engine` | byte encoding, key slots, header A/B areas, archive paths, crypto; lock/unlock round trips with nested folders, Unicode names, chunk-boundary sizes and empty files; tamper and truncation detection; startup recovery of interrupted locks and unlocks; cancel; the isolate runner; the real drive helper (import, check, export, a wrong key) |
 | `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); drive items (with a fake helper): lock, open, close, drives in use, decrypt to a folder, restarts; reminders, automatic re-locking and locking items with the app; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
-| `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files (Windows only, run in CI) |
-| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove, and a drive's open, close and decrypt; the protect dialog's methods and "Open it as"; the Dokany row in Settings; the tray icon following the items and running its menu |
-| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)) |
+| `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files; the Explorer entries with and without the plug-in, written under a test key (Windows only, run in CI) |
+| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove, and a drive's open, close and decrypt; the protect dialog's methods and "Open it as"; the Dokany row in Settings; the tray icon following the items and running its menu; Explorer's unlock and lock requests, and requests waiting for the app to be unlocked |
+| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)). The plug-in's choice of entry for each kind of item; on Windows, its COM objects as Explorer uses them, and end to end: registered, shown by Windows' own menu code (shell32) with the right title, and run |
 | `test/visual` | renders every main screen to PNG (only when `SCREENSHOTS_DIR` is set) |
 
 The tests use cheap Argon2id settings (`KdfPolicy.fast`) and temporary
@@ -471,6 +514,8 @@ folders. On every push, CI runs:
 
 - on Linux: format checks, `flutter analyze`, Clippy, and the Rust and
   Flutter tests;
-- on Windows: Clippy, the release helper, the Flutter tests, the release
-  build and the installer;
+- on Windows: Clippy, the plug-in's tests on its release build (end to
+  end in Explorer's menu code), the release helper and plug-in, the
+  Flutter tests, the release build and the installer, which is then
+  installed, checked and uninstalled;
 - on Windows with Dokany installed: the drive end-to-end test.

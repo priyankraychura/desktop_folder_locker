@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["vault2", "drive"]
+members = ["vault2", "drive", "shell"]
 exclude = ["vendor"]
 
 [workspace.package]

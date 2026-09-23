@@ -9,7 +9,7 @@ sealed class LaunchIntent {
 
   final String path;
 
-  /// Parses `--open <vault>` and `--lock <path>`.
+  /// Parses `--open <vault>`, `--lock <path>` and `--unlock <path>`.
   static LaunchIntent? parse(List<String> args) {
     for (var i = 0; i < args.length - 1; i++) {
       final path = args[i + 1].trim();
@@ -17,16 +17,23 @@ sealed class LaunchIntent {
       switch (args[i]) {
         case '--open':
           return OpenVaultIntent(path);
+        // "Lock with…" on a vault (without the Explorer plug-in, every item
+        // has it) means "unlock it".
+        case '--lock' when _isVault(path):
+        case '--unlock' when _isVault(path):
+          return OpenVaultIntent(path);
         case '--lock':
-          // "Lock with…" on a vault means "unlock it".
-          return path.toLowerCase().endsWith(AppInfo.vaultExtension) ||
-                  DriveVault.isDrivePath(path)
-              ? OpenVaultIntent(path)
-              : LockPathIntent(path);
+          return LockPathIntent(path);
+        case '--unlock':
+          return UnlockPathIntent(path);
       }
     }
     return null;
   }
+
+  static bool _isVault(String path) =>
+      path.toLowerCase().endsWith(AppInfo.vaultExtension) ||
+      DriveVault.isDrivePath(path);
 }
 
 /// A vault was double-clicked in Explorer: ask for its password.
@@ -34,9 +41,16 @@ final class OpenVaultIntent extends LaunchIntent {
   const OpenVaultIntent(super.path);
 }
 
-/// "Lock with Folder Locker" was chosen in Explorer.
+/// "Lock with Folder Locker" was chosen in Explorer: protect a new item,
+/// or lock a listed one again.
 final class LockPathIntent extends LaunchIntent {
   const LockPathIntent(super.path);
+}
+
+/// "Unlock with Folder Locker" was chosen in Explorer (the plug-in offers
+/// it for blocked, read-only and hidden items).
+final class UnlockPathIntent extends LaunchIntent {
+  const UnlockPathIntent(super.path);
 }
 
 final launchIntentsProvider =

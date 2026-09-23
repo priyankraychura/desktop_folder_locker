@@ -91,11 +91,22 @@ jobs:
 
       # Also compiles Dokany's user-mode library from source, only to link
       # against it; the helper uses the one Dokany installs.
-      - name: Lint and build the drive helper
+      - name: Lint the native parts
         working-directory: native
-        run: |
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo build --release -p folder-locker-drive
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The release build, as it ships: its COM objects, then end to end,
+      # registered for Explorer and shown and run by Windows' own menu code.
+      - name: Test the Explorer plug-in
+        working-directory: native
+        env:
+          FLK_SHELL_E2E: '1'
+          RUST_BACKTRACE: '1'
+        run: cargo test --release -p folder-locker-shell -- --nocapture
+
+      - name: Build the drive helper and the Explorer plug-in
+        working-directory: native
+        run: cargo build --release -p folder-locker-drive -p folder-locker-shell
 
       # Also exercises the Windows code paths of the engine (NTFS renames,
       # file attributes and free-space checks through FFI) and the app
@@ -110,14 +121,16 @@ jobs:
       # next to the exe (as the Flutter docs suggest) means users don't have
       # to install the redistributable. Dokany's installer goes along too, so
       # Setup and the app can install it.
-      - name: Bundle the Visual C++ runtime, the drive helper and Dokany
+      - name: Bundle the Visual C++ runtime, the native parts and Dokany
         shell: pwsh
         run: |
           $release = 'build\windows\x64\runner\Release'
           foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
             Copy-Item "$env:WINDIR\System32\$dll" $release
           }
-          Copy-Item native\target\release\folder_locker_drive.exe $release
+          foreach ($file in 'folder_locker_drive.exe', 'folder_locker_shell.dll') {
+            Copy-Item "native\target\release\$file" $release
+          }
           & .\installer\get-dokany.ps1 -Destination "$release\dokany"
           Get-ChildItem -Recurse $release -File | Select-Object Length, FullName
 
@@ -147,15 +160,28 @@ jobs:
             throw "Setup failed with $($process.ExitCode)"
           }
           $app = Join-Path $env:ProgramFiles 'Folder Locker'
-          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'dokany\Dokan_x64.msi') {
+          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'folder_locker_shell.dll', 'dokany\Dokan_x64.msi') {
             if (-not (Test-Path (Join-Path $app $file))) { throw "$file was not installed" }
           }
           if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {
             Get-Content $log -Tail 80
             throw 'Setup did not install Dokany'
           }
-          $command = (Get-ItemProperty 'HKCU:\Software\Classes\Directory\shell\FolderLocker.Lock\command').'(default)'
-          if ($command -notlike "*$app*") { throw "Unexpected Explorer command: $command" }
+          # The Explorer plug-in's entry (native/shell/tests/explorer.rs
+          # tests it in Explorer's menu).
+          $clsid = '{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}'
+          $classes = 'HKCU:\Software\Classes'
+          $server = (Get-ItemProperty "$classes\CLSID\$clsid\InprocServer32").'(default)'
+          if ($server -ne (Join-Path $app 'folder_locker_shell.dll')) { throw "Unexpected plug-in: $server" }
+          foreach ($target in 'Directory', '*', 'Drive') {
+            $handler = (Get-ItemProperty -LiteralPath "$classes\$target\shell\FolderLocker.Lock").ExplorerCommandHandler
+            if ($handler -ne $clsid) { throw "No plug-in entry on $target" }
+          }
+          if (Test-Path "$classes\Directory\shell\FolderLocker.Lock\command") {
+            throw 'The plain entry is still there'
+          }
+          $open = (Get-ItemProperty "$classes\FolderLocker.Vault\shell\open\command").'(default)'
+          if ($open -notlike "*$app*") { throw "Unexpected vault command: $open" }
 
           # The installed helper finds the Dokany that Setup installed.
           $start = [System.Diagnostics.ProcessStartInfo]::new((Join-Path $app 'folder_locker_drive.exe'))
@@ -180,8 +206,8 @@ jobs:
             Start-Sleep -Seconds 1
           }
           if (Test-Path (Join-Path $app 'folder_locker.exe')) { throw 'The app was not removed' }
-          if (Test-Path 'HKCU:\Software\Classes\Directory\shell\FolderLocker.Lock') {
-            throw 'The Explorer entries were not removed'
+          foreach ($key in 'Directory\shell\FolderLocker.Lock', 'Drive\shell\FolderLocker.Lock', "CLSID\$clsid", 'FolderLocker.Vault') {
+            if (Test-Path -LiteralPath "$classes\$key") { throw "$key was not removed" }
           }
           if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {
             throw 'Dokany should stay installed'

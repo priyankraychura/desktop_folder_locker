@@ -58,8 +58,11 @@ shown are temporary test folders.</sub>
 - **Explorer integration**:
   - vaults show a lock icon;
   - **double-click opens the password dialog**;
-  - folders and files get **Lock with Folder Locker** in the right-click
-    menu.
+  - the right-click menu knows each item: **Lock with Folder Locker** on
+    folders and files, **Unlock…** on blocked ones, **Open…** on drive
+    vaults, and the app does it right away;
+  - drive vault folders look locked: the vault icon, and only `vault.flk`
+    inside.
 - **Notification-area icon**: the app keeps running when you close the
   window. The icon shows when items are unlocked, and its menu locks
   everything in one click.
@@ -100,8 +103,9 @@ shown are temporary test folders.</sub>
    restored and opened. A drive vault opens as a drive (for example `V:`)
    instead: click **Open** in the app, or double-click `vault.flk` inside
    `Name.flkd`.
-5. Click **Lock** in the app, or **Lock all items** in the menu of its icon
-   next to the clock, to lock it again. The app can remind you about
+5. Click **Lock** in the app, **Lock with Folder Locker** in Explorer, or
+   **Lock all items** in the menu of its icon next to the clock, to lock it
+   again. The app can remind you about
    unlocked items, lock them again by itself, and offer to lock them when
    you quit.
 
@@ -137,10 +141,10 @@ Requirements:
   workload. Flutter needs it, and the `sodium` package uses it to compile
   libsodium from source automatically on the first build.
 - [Rust](https://rustup.rs) (stable, the default MSVC toolchain) for the
-  drive helper in `native/`.
+  drive helper and the Explorer plug-in in `native/`.
 
 ```powershell
-cd native; cargo build --release; cd ..   # the drive helper
+cd native; cargo build --release; cd ..   # the drive helper and plug-in
 flutter pub get
 flutter run -d windows            # run in debug mode
 flutter test                      # run the tests
@@ -149,12 +153,14 @@ flutter build windows --release   # build\windows\x64\runner\Release
 pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
 ```
 
-`flutter build windows` copies the release helper
-(`native\target\release\folder_locker_drive.exe`) next to the app, if it
-has been built. To try a debug build of the helper instead, set
-`FOLDER_LOCKER_DRIVE` to its path. `cargo test` in `native/` runs the
-helper's tests; the drive test needs Dokany (see
-[docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md)).
+`flutter build windows` copies the release helper and plug-in
+(`folder_locker_drive.exe` and `folder_locker_shell.dll` from
+`native\target\release`) next to the app, if they have been built. The app
+registers the plug-in for Explorer when it starts. To try a debug build of
+the helper instead, set `FOLDER_LOCKER_DRIVE` to its path. `cargo test` in
+`native/` runs their tests; the drive test needs Dokany (see
+[docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md)), and the Explorer test, which
+rewrites your Explorer entries, runs only with `FLK_SHELL_E2E=1`.
 
 To build the installer, install [Inno Setup 6](https://jrsoftware.org/isinfo.php),
 then:
@@ -250,9 +256,10 @@ lib/
     setup/               first-run onboarding
     shell/               home window, sidebar, launch arguments
 test/                    engine, feature, widget and screenshot tests
-native/                  the drive helper, in Rust (Cargo workspace)
+native/                  the native parts, in Rust (Cargo workspace)
   vault2/                drive vault format: keys, names, contents, tree
   drive/                 folder_locker_drive.exe: protocol, Dokany drive
+  shell/                 folder_locker_shell.dll: the Explorer plug-in
   vendor/dokan/          Dokany bindings for Rust, with a fix
 installer/               Inno Setup script
 tool/                    icon generator

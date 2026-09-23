@@ -107,11 +107,13 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
 
-# The drive helper (native/), when it has been built with
-# `cargo build --release` in native/: copied next to the app, where the app
-# looks for it. CI and the installer do the same with the release build.
-set(DRIVE_HELPER "${CMAKE_CURRENT_SOURCE_DIR}/../native/target/release/folder_locker_drive.exe")
-if(EXISTS "${DRIVE_HELPER}")
-  install(FILES "${DRIVE_HELPER}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
-    COMPONENT Runtime)
-endif()
+# The drive helper and the Explorer plug-in (native/), when they have been
+# built with `cargo build --release` in native/: copied next to the app,
+# where the app looks for them. CI and the installer use the release build.
+set(NATIVE_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../native/target/release")
+foreach(NATIVE_FILE folder_locker_drive.exe folder_locker_shell.dll)
+  if(EXISTS "${NATIVE_RELEASE}/${NATIVE_FILE}")
+    install(FILES "${NATIVE_RELEASE}/${NATIVE_FILE}"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+  endif()
+endforeach()
