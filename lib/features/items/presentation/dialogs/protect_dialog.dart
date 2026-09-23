@@ -38,13 +38,16 @@ class ProtectChoice {
 
 /// Asks how to protect a new item. [accessProblem] explains why Block
 /// access and Read-only can't be used for it (`null` if they can), and
-/// [driveStatus] whether a folder can become a drive.
+/// [driveStatus] whether a folder can become a drive. With
+/// [installDokany], Dokany can be installed from the dialog; it returns the
+/// new status (`null` if nothing changed).
 Future<ProtectChoice?> showProtectDialog(
   BuildContext context, {
   required String path,
   required ItemKind kind,
   AccessProblem? accessProblem,
   Future<DokanyStatus>? driveStatus,
+  Future<DokanyStatus?> Function()? installDokany,
 }) => showDialog<ProtectChoice>(
   context: context,
   builder: (_) => _ProtectDialog(
@@ -52,6 +55,7 @@ Future<ProtectChoice?> showProtectDialog(
     kind: kind,
     accessProblem: accessProblem,
     driveStatus: driveStatus,
+    installDokany: installDokany,
   ),
 );
 
@@ -72,6 +76,7 @@ class _ProtectDialog extends StatefulWidget {
     this.relock,
     this.accessProblem,
     this.driveStatus,
+    this.installDokany,
   });
 
   final String path;
@@ -80,6 +85,7 @@ class _ProtectDialog extends StatefulWidget {
 
   /// Fails when drives can't be made at all (the helper is missing).
   final Future<DokanyStatus>? driveStatus;
+  final Future<DokanyStatus?> Function()? installDokany;
 
   /// Set when locking an existing custom-password item again.
   final ProtectedItem? relock;
@@ -98,6 +104,8 @@ class _ProtectDialogState extends State<_ProtectDialog> {
   /// Whether an encrypted folder opens as a drive (remembered while
   /// another method is selected).
   late bool _asDrive = widget.relock?.method == ProtectionMethod.drive;
+  late Future<DokanyStatus>? _driveStatus = widget.driveStatus;
+  bool _installingDokany = false;
 
   bool get _isRelock => widget.relock != null;
   String get _name => p.basename(widget.path);
@@ -117,6 +125,20 @@ class _ProtectDialogState extends State<_ProtectDialog> {
   void dispose() {
     _form.dispose();
     super.dispose();
+  }
+
+  Future<void> _installDokany() async {
+    setState(() => _installingDokany = true);
+    try {
+      final status = await widget.installDokany!();
+      if (status != null && mounted) {
+        setState(() {
+          _driveStatus = Future.value(status);
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _installingDokany = false);
+    }
   }
 
   String get _actionLabel => switch (_method) {
@@ -202,7 +224,11 @@ class _ProtectDialogState extends State<_ProtectDialog> {
                       padding: const EdgeInsets.only(top: AppSpacing.lg),
                       child: _OpenAsChoice(
                         asDrive: _asDrive,
-                        status: widget.driveStatus,
+                        status: _driveStatus,
+                        installing: _installingDokany,
+                        onInstall: widget.installDokany == null
+                            ? null
+                            : _installDokany,
                         onChanged: (asDrive) => setState(() {
                           _asDrive = asDrive;
                           _method = asDrive
@@ -392,11 +418,17 @@ class _OpenAsChoice extends StatelessWidget {
     required this.asDrive,
     required this.status,
     required this.onChanged,
+    this.installing = false,
+    this.onInstall,
   });
 
   final bool asDrive;
   final Future<DokanyStatus>? status;
   final ValueChanged<bool> onChanged;
+
+  /// Installs the Dokany that comes with the app (`null` if it didn't).
+  final VoidCallback? onInstall;
+  final bool installing;
 
   @override
   Widget build(BuildContext context) {
@@ -449,17 +481,35 @@ class _OpenAsChoice extends StatelessWidget {
               ),
             ] else if (asDrive && dokany != null && !dokany.installed) ...[
               const SizedBox(height: AppSpacing.md),
-              InfoBanner(
-                icon: Icons.download_rounded,
-                tone: Tone.warning,
-                message:
-                    'Opening drives needs Dokany, a free driver that Windows '
-                    'trusts. You can lock the folder now and install Dokany '
-                    'before you open it.',
-                actionLabel: 'Get Dokany',
-                onAction: () =>
-                    unawaited(ShellActions.openUrl(AppInfo.dokanyDownloadUrl)),
-              ),
+              if (dokany.outdated)
+                InfoBanner(
+                  icon: Icons.update_rounded,
+                  tone: Tone.warning,
+                  message:
+                      '${dokany.reason}. Remove it in Windows Settings › '
+                      'Apps, then install Dokany again. You can lock the '
+                      'folder now and open it later.',
+                )
+              else
+                InfoBanner(
+                  icon: Icons.download_rounded,
+                  tone: Tone.warning,
+                  message:
+                      'Opening drives needs Dokany, a free driver that '
+                      'Windows trusts. You can lock the folder now and '
+                      'install Dokany before you open it.',
+                  actionLabel: onInstall == null
+                      ? 'Get Dokany'
+                      : installing
+                      ? 'Installing…'
+                      : 'Install Dokany',
+                  onAction: installing
+                      ? null
+                      : onInstall ??
+                            () => unawaited(
+                              ShellActions.openUrl(AppInfo.dokanyDownloadUrl),
+                            ),
+                ),
             ],
           ],
         );

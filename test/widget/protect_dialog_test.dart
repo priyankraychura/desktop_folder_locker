@@ -14,6 +14,7 @@ void main() {
     AccessProblem? accessProblem,
     ItemKind kind = ItemKind.folder,
     Future<DokanyStatus>? driveStatus,
+    Future<DokanyStatus?> Function()? installDokany,
   }) async {
     tester.view
       ..physicalSize = const Size(1280, 1100)
@@ -32,6 +33,7 @@ void main() {
               kind: kind,
               accessProblem: accessProblem,
               driveStatus: driveStatus,
+              installDokany: installDokany,
             ),
             child: const Text('open'),
           ),
@@ -125,6 +127,52 @@ void main() {
     await tester.tap(find.text('A drive'));
     await tester.pumpAndSettle();
     expect(find.text('Get Dokany'), findsOneWidget);
+  });
+
+  testWidgets('Dokany installs from the dialog when it came with the app', (
+    tester,
+  ) async {
+    var installs = 0;
+    await open(
+      tester,
+      driveStatus: Future.value(
+        const DokanyStatus(installed: false, reason: 'Dokany is not installed'),
+      ),
+      installDokany: () async {
+        installs++;
+        return const DokanyStatus(installed: true);
+      },
+    );
+    await tester.tap(find.text('A drive'));
+    await tester.pumpAndSettle();
+    expect(find.text('Get Dokany'), findsNothing);
+
+    await tester.tap(find.text('Install Dokany'));
+    await tester.pumpAndSettle();
+    expect(installs, 1);
+    // Ready now: no more banner.
+    expect(find.text('Install Dokany'), findsNothing);
+    expect(find.textContaining('needs Dokany'), findsNothing);
+  });
+
+  testWidgets('an outdated Dokany is explained, not installed over', (
+    tester,
+  ) async {
+    await open(
+      tester,
+      driveStatus: Future.value(
+        const DokanyStatus(
+          installed: false,
+          outdated: true,
+          reason: 'Dokany 2.0.5 is too old: version 2.0.6 or newer is needed',
+        ),
+      ),
+      installDokany: () async => null,
+    );
+    await tester.tap(find.text('A drive'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2.0.5 is too old'), findsOneWidget);
+    expect(find.text('Install Dokany'), findsNothing);
   });
 
   testWidgets('files and missing helpers get no drive', (tester) async {

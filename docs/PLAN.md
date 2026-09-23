@@ -62,8 +62,9 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 **Manual test checklist (Windows 10/11)**
 
 1. Install from the CI artifact `folder-locker-setup`. SmartScreen warns
-   because the installer is unsigned: *More info → Run anyway*. No
-   administrator prompt should appear.
+   because the installer is unsigned: *More info → Run anyway*. Since 1.2,
+   installing for all users asks for administrator rights once; *Install
+   for me only* doesn't.
 2. First start: create a master password, then copy the recovery key.
 3. Drag a test folder into the app → **Encrypt** → `Name.flk` appears in the
    same place, with the lock icon.
@@ -146,7 +147,7 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 | 2a | Vault format v2 | `Name.flkd` folder: the `.flk` header and key slots (`vault.flk`) and one encrypted file per file. Encrypted names (a random IV per folder, long names), 64 KiB blocks with random access, holes, case-insensitive lookups that keep the case | ✅ unit tests on Linux and Windows |
 | 2b | Drive helper | `folder_locker_drive.exe`, in Rust: JSON lines over stdin/stdout, import and export with a full check, the Dokany file system, closes every drive when the app goes away, runs without Dokany and finds it once it's installed | ✅ end-to-end drive test on Windows with Dokany in CI |
 | 2c | App integration | "Open it as a folder / a drive" when encrypting a folder; Open and Lock on the card, with the drive letter; Decrypt to a folder; the crash journal; drives closed from outside; Settings → Encrypted drives | ✅ logic and UI tests · 🧪 on a real PC |
-| 2d | Packaging | The helper next to the app (CMake and the installer); the Dokany download link in the installer and in Settings; version 1.2.0 | 🧪 |
+| 2d | Packaging | The helper next to the app (CMake and the installer). Dokany comes with the installer (a pinned version, checked by its SHA-256): installed when missing, with one administrator prompt, or later from Settings. CI installs and uninstalls the whole setup. Version 1.2.0 | ✅ installer tested in CI · 🧪 on a real PC |
 
 **Changes from the first plan**
 
@@ -155,13 +156,15 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 - **Standard input and output, not a named pipe**: only the app that
   started the helper can talk to it, and the helper knows right away when
   the app is gone.
-- **Dokany is linked, not bundled**: its installer puts a driver in
-  Windows, which needs administrator rights, while Folder Locker installs
-  per user without them. The installer and Settings link to its download.
+- **Dokany comes with the installer**: it puts a driver in Windows, which
+  needs administrator rights. The installer now installs for all users by
+  default, so one prompt at the start covers both. *Install for me only*
+  still works without one, and asks only if Dokany is installed along.
 
 **Limits of drive vaults**
 
-- They need Dokany, installed once with administrator rights.
+- They need Dokany, installed once with administrator rights (the
+  installer or Settings does it).
 - Without the password, the number of files and folders, the sizes and the
   dates can be seen (not names or contents).
 - The drive has no permissions, alternate data streams or Recycle Bin.
@@ -172,11 +175,11 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 
 **Manual test checklist for Phase 2 (Windows 10/11)**
 
-1. Without Dokany: **Settings → Encrypted drives** says it's missing and
-   offers **Get Dokany**. The protect dialog shows the same link under
-   "A drive".
-2. Install Dokany (`Dokan_x64.msi`), then **Check again** in Settings →
-   "Ready", without restarting the app.
+1. Install with the Dokany task unticked. **Settings → Encrypted drives**
+   says Dokany is missing and offers **Install Dokany**. The protect dialog
+   offers the same under "A drive".
+2. **Install Dokany** → Windows asks for administrator rights → Dokany's
+   setup shows its progress → "Ready", without restarting the app.
 3. Protect a folder → **Encrypt** → Open it as **A drive** → `Name.flkd`
    appears in its place.
 4. **Open** → a drive such as `V:` opens in Explorer with the files. The
@@ -229,13 +232,14 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 | Recovery key via X25519 sealed box | The app can add a recovery slot to every vault without storing any recovery secret |
 | JSON files with atomic writes (not SQLite) | Small data set, no native dependency, easy to back up and inspect |
 | Riverpod | Testable dependency injection and state, no code generation |
-| Per-user install (Inno Setup, `PrivilegesRequired=lowest`) | No administrator prompt; Explorer integration lives in HKCU anyway |
+| Per-user install (Inno Setup, `PrivilegesRequired=lowest`) | No administrator prompt; Explorer integration lives in HKCU anyway. *Changed in 1.2: all users by default, see below* |
 | Bundle the Visual C++ runtime DLLs | Flutter apps need them, and not every PC has the redistributable |
 | Block access with one "deny Everyone" permission rule, only on items the user owns | Instant even for huge folders; the owner can always remove it, so nobody is locked out for good |
 | Tray icon written in the runner (C++) instead of a plugin | About 250 lines, no extra dependency, and notifications work through the tray icon without registering the app |
 | New recovery key: save the key first, then re-seal vaults, and finish later if needed | The old key must stop working right away; each vault update is crash-safe on its own |
 | Drive vaults store one encrypted file per file (like Cryptomator and gocryptfs) | Random access: after the first lock, opening and locking are instant at any size, and a change rewrites only the blocks it touches |
 | A helper program in Rust for drives, started by the app and talking over stdin/stdout | One small exe with nothing to install; keys can be wiped; nobody else can talk to it; every drive closes when the app goes away |
-| Dokany for the drive, installed by the user | Free, open source (LGPL) and already signed by Microsoft, so there is no driver of our own; its installer needs administrator rights, so ours only links to it |
+| Dokany for the drive | Free, open source (LGPL) and already signed by Microsoft, so there is no driver of our own. WinFsp is faster, but its free license needs the app to be open source (Phase 4), and the helper would need rewriting. Windows' own options either write plain files to disk (ProjFS, Cloud Files) or are being retired (WebDAV) |
+| Dokany comes with the installer, which installs for all users by default | Installing a driver needs administrator rights anyway, so one prompt covers everything, and nobody has to find a download. The version is pinned and checked by SHA-256, and it's the one CI tests the drive with. The app can install the same copy later |
 | Passwords stay in the app; the helper only gets a vault's data key | One place for Argon2id, key slots and the recovery key, shared by both kinds of vault |
 | The dokan Rust bindings are vendored with a small fix | The published version crashed on requests for handles the file system never opened; the fix is listed in `native/vendor/dokan/PATCHES.md` |

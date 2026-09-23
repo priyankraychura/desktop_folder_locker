@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../app/dokany_install.dart';
 import '../../../app/error_text.dart';
 import '../../../core/di/core_providers.dart';
 import '../../../core/theme/app_palette.dart';
@@ -68,12 +69,14 @@ class ItemActions {
     final driveStatus = isFolder
         ? (_ref.read(driveServiceProvider).status()..ignore())
         : null;
+    final canInstallDokany = _ref.read(dokanyInstallerProvider).isAvailable;
     final choice = await showProtectDialog(
       _context,
       path: path,
       kind: isFolder ? ItemKind.folder : ItemKind.file,
       accessProblem: _controller.accessRuleProblem(path),
       driveStatus: driveStatus,
+      installDokany: canInstallDokany ? () => installDokany(_context) : null,
     );
     if (choice == null) return;
     await _run(() async {

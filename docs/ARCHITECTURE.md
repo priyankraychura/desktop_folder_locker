@@ -344,6 +344,11 @@ the security notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 - **Passwords** work as for `.flk` vaults: a new master password or
   recovery key rewrites the key slots in `vault.flk`, even while the drive
   is open.
+- **Dokany** ships next to the app (`dokany\Dokan_x64.msi`, a pinned
+  version fetched by `installer/get-dokany.ps1`). The installer runs it
+  when Dokany is missing; `BundledDokanyInstaller`
+  (`platform/dokany_setup.dart`) runs it later from Settings with
+  `ShellExecuteEx("runas")`. The helper finds it without a restart.
 
 ## 6. App data
 

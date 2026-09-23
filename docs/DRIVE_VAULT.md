@@ -230,7 +230,7 @@ helper → app   {"id": 3, "ok": true, "result": {"mountPoint": "V:\\", "driveLe
 
 | `cmd` | Fields | Result |
 |---|---|---|
-| `hello` | | `version`, `dokany` (`installed`, `version`, `driver`, `reason`) |
+| `hello` | | `version`, `dokany` (`installed`, `outdated`, `version`, `driver`, `reason`). `outdated` means a Dokany older than 2.0.6, which has to be removed before a newer one can be installed. |
 | `import` | `vault`, `key`, `source` | `files`, `folders`, `bytes`. Creates `data\` from the folder `source`, then compares the two. |
 | `export` | `vault`, `key`, `target` | `files`, `folders`, `bytes`. Decrypts into the new folder `target`, then compares the two. |
 | `mount` | `vault`, `key`, `label`, optional `driveLetter`, `readOnly` | `mountPoint`, `driveLetter`. Uses the first free letter from `V` to `Z`, then `U` down to `D`. |
@@ -299,9 +299,11 @@ detected.
 
 **Please know:**
 
-- **Dokany is needed.** It's free and signed by Microsoft, and the installer
-  links to it. Without it, drive vaults can't be opened, but **Decrypt to a
-  folder** still works: that only needs the helper.
+- **Dokany is needed.** It's free and signed by Microsoft. The installer
+  installs it if it's missing, and so does **Install Dokany** in Settings
+  (both use the same pinned version, checked by its SHA-256). Without it,
+  drive vaults can't be opened, but **Decrypt to a folder** still works:
+  that only needs the helper.
 - **While the drive is open**, every program running as you can read it,
   like any unlocked folder. Lock it when you're done. Quitting the app (or
   a crash) closes it.

@@ -57,17 +57,40 @@ fn dokany_loaded() -> bool {
     true
 }
 
+/// The oldest Dokany the helper works with: the one its bindings are made
+/// for (dokan-sys 0.3.1+dokan206).
+const MIN_DOKANY_VERSION: u32 = 206;
+
 pub fn dokany_status() -> Value {
     if !dokany_loaded() {
         return json!({"installed": false, "reason": "Dokany is not installed"});
     }
+    let version = dokan::get_lib_version();
     let driver = dokan::get_driver_version();
+    let outdated = version < MIN_DOKANY_VERSION;
+    let reason = if outdated {
+        format!(
+            "Dokany {} is too old: version {} or newer is needed",
+            version_text(version),
+            version_text(MIN_DOKANY_VERSION)
+        )
+    } else if driver == 0 {
+        "The Dokany driver is not running".to_owned()
+    } else {
+        String::new()
+    };
     json!({
-        "installed": driver != 0,
-        "version": dokan::get_lib_version(),
+        "installed": !outdated && driver != 0,
+        "outdated": outdated,
+        "version": version,
         "driver": driver,
-        "reason": if driver == 0 { "The Dokany driver is not running" } else { "" },
+        "reason": reason,
     })
+}
+
+/// `231` → `2.3.1`, as Dokany numbers its versions.
+fn version_text(version: u32) -> String {
+    format!("{}.{}.{}", version / 100, version / 10 % 10, version % 10)
 }
 
 /// The mounted vaults, by vault folder.
@@ -367,4 +390,15 @@ fn vault_key(vault: &Path) -> String {
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writes_versions_like_dokany() {
+        assert_eq!(version_text(231), "2.3.1");
+        assert_eq!(version_text(MIN_DOKANY_VERSION), "2.0.6");
+    }
 }

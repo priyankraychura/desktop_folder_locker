@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/dokany_install.dart';
 import '../../../app/error_text.dart';
 import '../../../core/constants/app_info.dart';
 import '../../../core/di/core_providers.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/widgets/buttons.dart';
 import '../../../core/widgets/cards.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/status_badge.dart';
@@ -55,7 +57,6 @@ class SettingsPage extends ConsumerWidget {
     final controller = ref.read(settingsControllerProvider.notifier);
     final keystore = ref.watch(sessionControllerProvider).keystore;
     final hasTray = ref.watch(systemTrayProvider).isAvailable;
-    final dokany = ref.watch(dokanyStatusProvider);
 
     Future<void> guarded(Future<void> Function() action) async {
       try {
@@ -268,45 +269,7 @@ class SettingsPage extends ConsumerWidget {
                     : null,
               ),
             ),
-            SettingsRow(
-              icon: Icons.storage_rounded,
-              tone: Tone.success,
-              title: 'Encrypted drives',
-              subtitle: switch (dokany) {
-                AsyncData(value: DokanyStatus(installed: true)) =>
-                  'Dokany is installed, so encrypted folders can open as a '
-                      'drive, without decrypting anything to the disk.',
-                AsyncData() =>
-                  'Opening encrypted folders as a drive needs Dokany, a '
-                      'free driver that Windows trusts. Install it, then '
-                      'check again.',
-                AsyncError() =>
-                  'Not available: the drive helper is missing. Reinstall '
-                      '${AppInfo.name} to use drives.',
-                _ => 'Checking…',
-              },
-              trailing: switch (dokany) {
-                AsyncData(value: DokanyStatus(installed: true)) =>
-                  const StatusBadge(tone: Tone.success, label: 'Ready'),
-                AsyncData() => Wrap(
-                  spacing: AppSpacing.sm,
-                  children: [
-                    TextButton(
-                      onPressed: () => ref.invalidate(dokanyStatusProvider),
-                      child: const Text('Check again'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => unawaited(
-                        ShellActions.openUrl(AppInfo.dokanyDownloadUrl),
-                      ),
-                      icon: const Icon(Icons.download_rounded, size: 18),
-                      label: const Text('Get Dokany'),
-                    ),
-                  ],
-                ),
-                _ => null,
-              },
-            ),
+            const _EncryptedDrivesRow(),
             SettingsRow(
               icon: Icons.folder_open_rounded,
               tone: Tone.info,
@@ -369,6 +332,88 @@ class SettingsPage extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Whether encrypted folders can open as drives, and installing Dokany if
+/// they can't.
+class _EncryptedDrivesRow extends ConsumerStatefulWidget {
+  const _EncryptedDrivesRow();
+
+  @override
+  ConsumerState<_EncryptedDrivesRow> createState() =>
+      _EncryptedDrivesRowState();
+}
+
+class _EncryptedDrivesRowState extends ConsumerState<_EncryptedDrivesRow> {
+  bool _installing = false;
+
+  Future<void> _install() async {
+    setState(() => _installing = true);
+    try {
+      await installDokany(context);
+    } finally {
+      if (mounted) setState(() => _installing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dokany = ref.watch(dokanyStatusProvider);
+    final canInstall = ref.watch(dokanyInstallerProvider).isAvailable;
+    return SettingsRow(
+      icon: Icons.storage_rounded,
+      tone: Tone.success,
+      title: 'Encrypted drives',
+      subtitle: switch (dokany) {
+        AsyncData(value: DokanyStatus(installed: true)) =>
+          'Dokany is installed, so encrypted folders can open as a drive, '
+              'without decrypting anything to the disk.',
+        AsyncData(value: DokanyStatus(outdated: true, :final reason)) =>
+          '$reason. Remove it in Windows Settings › Apps, then install '
+              'Dokany again here.',
+        AsyncData() =>
+          'Opening encrypted folders as a drive needs Dokany, a free driver '
+              'that Windows trusts.${canInstall ? '' : ' Install it, then check again.'}',
+        AsyncError() =>
+          'Not available: the drive helper is missing. Reinstall '
+              '${AppInfo.name} to use drives.',
+        _ => 'Checking…',
+      },
+      trailing: switch (dokany) {
+        AsyncData(value: DokanyStatus(installed: true)) => const StatusBadge(
+          tone: Tone.success,
+          label: 'Ready',
+        ),
+        AsyncData(value: final status) => Wrap(
+          spacing: AppSpacing.sm,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            TextButton(
+              onPressed: _installing
+                  ? null
+                  : () => ref.invalidate(dokanyStatusProvider),
+              child: const Text('Check again'),
+            ),
+            if (canInstall && !status.outdated)
+              LoadingButton(
+                label: 'Install Dokany',
+                icon: Icons.download_rounded,
+                busy: _installing,
+                onPressed: _install,
+              )
+            else if (!status.outdated)
+              OutlinedButton.icon(
+                onPressed: () =>
+                    unawaited(ShellActions.openUrl(AppInfo.dokanyDownloadUrl)),
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const Text('Get Dokany'),
+              ),
+          ],
+        ),
+        _ => null,
+      },
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../../engine/crypto/crypto_service.dart';
 import '../../engine/crypto/kdf_params.dart';
@@ -8,6 +9,7 @@ import '../../engine/drive/drive_helper.dart';
 import '../../engine/drive/drive_service.dart';
 import '../../engine/engine_runner.dart';
 import '../../platform/access_control.dart';
+import '../../platform/dokany_setup.dart';
 import '../../platform/system_tray.dart';
 import '../storage/app_paths.dart';
 
@@ -68,4 +70,9 @@ final driveServiceProvider = Provider<DriveService>((ref) {
 /// drive helper is missing. Invalidate it to check again.
 final dokanyStatusProvider = FutureProvider<DokanyStatus>(
   (ref) => ref.watch(driveServiceProvider).status(),
+);
+
+/// Installs the Dokany that comes with the app. Tests use a fake.
+final dokanyInstallerProvider = Provider<DokanyInstaller>(
+  (ref) => BundledDokanyInstaller(p.dirname(ref.watch(executablePathProvider))),
 );

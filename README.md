@@ -75,8 +75,9 @@ shown are temporary test folders.</sub>
   - light and dark themes, custom title bar and drag & drop;
   - search and filters, progress with cancel, toasts and auto-lock;
   - keyboard shortcuts.
-- **Private**: no account, no cloud, no telemetry, and no administrator
-  rights needed.
+- **Private**: no account, no cloud and no telemetry. Using the app needs
+  no administrator rights; only installing it for all users (and Dokany)
+  asks once.
 
 ## How it works
 
@@ -111,17 +112,19 @@ The app is not published yet. To try it:
 1. Open the latest successful
    [CI run](https://github.com/priyankraychura/desktop_folder_locker/actions/workflows/ci.yml).
 2. Download the **folder-locker-setup** artifact.
-3. Run `FolderLocker-Setup-<version>.exe`. It installs for your user only, so
-   no administrator rights are needed.
+3. Run `FolderLocker-Setup-<version>.exe`. It installs for all users, with
+   one administrator prompt at the start, or, if you choose **Install for me
+   only**, for you without one.
 
 The installer is not code-signed yet (planned in Phase 4), so Windows
 SmartScreen warns about it. Click **More info → Run anyway**.
 
-To open encrypted folders as drives, also install
-[Dokany](https://github.com/dokan-dev/dokany/releases/latest) (free). Take
-the x64 installer (`Dokan_x64.msi`). It needs administrator rights once,
-because it installs a driver. The installer's last page offers the link,
-and **Settings → Encrypted drives** shows whether it's ready.
+Opening encrypted folders as drives needs
+[Dokany](https://github.com/dokan-dev/dokany), a free driver. If it's
+missing, the installer installs it too (the task is ticked by default), with
+the same administrator prompt. You can also install it later with **Install
+Dokany** in **Settings → Encrypted drives**, which also shows whether it's
+ready.
 
 ## Build from source
 
@@ -142,6 +145,8 @@ flutter pub get
 flutter run -d windows            # run in debug mode
 flutter test                      # run the tests
 flutter build windows --release   # build\windows\x64\runner\Release
+# Dokany's installer, checked against its known SHA-256, next to the app:
+pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
 ```
 
 `flutter build windows` copies the release helper

@@ -99,8 +99,9 @@ jobs:
 
       # Flutter apps need the Visual C++ runtime. Shipping these three DLLs
       # next to the exe (as the Flutter docs suggest) means users don't have
-      # to install the redistributable.
-      - name: Bundle the Visual C++ runtime and the drive helper
+      # to install the redistributable. Dokany's installer goes along too, so
+      # Setup and the app can install it.
+      - name: Bundle the Visual C++ runtime, the drive helper and Dokany
         shell: pwsh
         run: |
           $release = 'build\windows\x64\runner\Release'
@@ -108,7 +109,8 @@ jobs:
             Copy-Item "$env:WINDIR\System32\$dll" $release
           }
           Copy-Item native\target\release\folder_locker_drive.exe $release
-          Get-ChildItem $release
+          & .\installer\get-dokany.ps1 -Destination "$release\dokany"
+          Get-ChildItem -Recurse $release -File | Select-Object Length, FullName
 
       - name: Build installer
         shell: pwsh
@@ -121,6 +123,60 @@ jobs:
           $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
           & $iscc "/DAppVersion=$version" installer\folder_locker.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Installs for all users as a user would (Dokany included, as it's not
+      # on this machine yet), checks the result, and uninstalls again.
+      - name: Test the installer
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem build\installer\*.exe | Select-Object -First 1).FullName
+          $log = Join-Path $env:RUNNER_TEMP 'setup.log'
+          $process = Start-Process $setup -Wait -PassThru -ArgumentList `
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/ALLUSERS', "/LOG=`"$log`""
+          if ($process.ExitCode -ne 0) {
+            Get-Content $log -Tail 80
+            throw "Setup failed with $($process.ExitCode)"
+          }
+          $app = Join-Path $env:ProgramFiles 'Folder Locker'
+          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'dokany\Dokan_x64.msi') {
+            if (-not (Test-Path (Join-Path $app $file))) { throw "$file was not installed" }
+          }
+          if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {
+            Get-Content $log -Tail 80
+            throw 'Setup did not install Dokany'
+          }
+          $command = (Get-ItemProperty 'HKCU:\Software\Classes\Directory\shell\FolderLocker.Lock\command').'(default)'
+          if ($command -notlike "*$app*") { throw "Unexpected Explorer command: $command" }
+
+          # The installed helper finds the Dokany that Setup installed.
+          $start = [System.Diagnostics.ProcessStartInfo]::new((Join-Path $app 'folder_locker_drive.exe'))
+          $start.UseShellExecute = $false
+          $start.RedirectStandardInput = $true
+          $start.RedirectStandardOutput = $true
+          $helper = [System.Diagnostics.Process]::Start($start)
+          $helper.StandardInput.WriteLine('{"id":1,"cmd":"hello"}')
+          $helper.StandardInput.Close()
+          $reply = $helper.StandardOutput.ReadToEnd()
+          $helper.WaitForExit()
+          Write-Host $reply
+          if (($reply | ConvertFrom-Json).result.dokany.installed -ne $true) {
+            throw 'The helper does not find Dokany'
+          }
+
+          # The uninstaller goes on from a copy of itself: wait for it.
+          Start-Process (Join-Path $app 'unins000.exe') -Wait -ArgumentList `
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          $deadline = (Get-Date).AddMinutes(2)
+          while ((Test-Path (Join-Path $app 'folder_locker.exe')) -and (Get-Date) -lt $deadline) {
+            Start-Sleep -Seconds 1
+          }
+          if (Test-Path (Join-Path $app 'folder_locker.exe')) { throw 'The app was not removed' }
+          if (Test-Path 'HKCU:\Software\Classes\Directory\shell\FolderLocker.Lock') {
+            throw 'The Explorer entries were not removed'
+          }
+          if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {
+            throw 'Dokany should stay installed'
+          }
 
       - name: Upload installer
         uses: actions/upload-artifact@v5
@@ -147,16 +203,11 @@ jobs:
         with:
           workspaces: native
 
-      # The latest Dokany release, as users get it.
+      # The same Dokany that the installer ships.
       - name: Install Dokany
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          $dir = Join-Path $env:RUNNER_TEMP 'dokany'
-          gh release download --repo dokan-dev/dokany --pattern '*x64*.msi' --dir $dir
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $msi = (Get-ChildItem $dir -Filter *.msi | Select-Object -First 1).FullName
+          $msi = & .\installer\get-dokany.ps1 -Destination (Join-Path $env:RUNNER_TEMP 'dokany')
           $log = Join-Path $env:RUNNER_TEMP 'dokany.log'
           Write-Host "Installing $msi"
           $process = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v `"$log`"" -Wait -PassThru

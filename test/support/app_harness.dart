@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'fake_access_rules.dart';
+import 'fake_dokany_installer.dart';
 import 'fake_drive_service.dart';
 import 'fake_system_tray.dart';
 
@@ -26,6 +27,7 @@ class AppHarness {
     this.accessRules,
     this.tray,
     this.drives,
+    this.dokanyInstaller,
   );
 
   final Directory root;
@@ -40,6 +42,9 @@ class AppHarness {
   /// Stands in for the drive helper.
   final FakeDriveService drives;
 
+  /// Stands in for Dokany's installer (not bundled unless a test says so).
+  final FakeDokanyInstaller dokanyInstaller;
+
   static Future<AppHarness> create({
     AppSettings settings = const AppSettings(),
     Directory? root,
@@ -51,6 +56,7 @@ class AppHarness {
     final accessRules = FakeAccessRules();
     final tray = FakeSystemTray();
     drives ??= FakeDriveService();
+    final dokanyInstaller = FakeDokanyInstaller();
     final container = ProviderContainer(
       overrides: [
         appPathsProvider.overrideWithValue(paths),
@@ -66,10 +72,18 @@ class AppHarness {
         accessRulesProvider.overrideWithValue(accessRules),
         systemTrayProvider.overrideWithValue(tray),
         driveServiceProvider.overrideWithValue(drives),
+        dokanyInstallerProvider.overrideWithValue(dokanyInstaller),
       ],
       retry: (_, _) => null,
     );
-    return AppHarness._(root, container, accessRules, tray, drives);
+    return AppHarness._(
+      root,
+      container,
+      accessRules,
+      tray,
+      drives,
+      dokanyInstaller,
+    );
   }
 
   /// A folder for user files (outside the app data folder).

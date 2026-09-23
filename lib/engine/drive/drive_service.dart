@@ -42,9 +42,17 @@ class DriveException implements Exception {
 
 /// Whether drives can be opened on this PC.
 class DokanyStatus {
-  const DokanyStatus({required this.installed, this.reason});
+  const DokanyStatus({
+    required this.installed,
+    this.outdated = false,
+    this.reason,
+  });
 
   final bool installed;
+
+  /// An older Dokany is installed, which has to be removed before a newer
+  /// one can be installed.
+  final bool outdated;
 
   /// Why not, when [installed] is `false`.
   final String? reason;

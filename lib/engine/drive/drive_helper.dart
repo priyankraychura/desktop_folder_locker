@@ -54,6 +54,7 @@ class HelperDriveService implements DriveService {
       {'installed': true} => const DokanyStatus(installed: true),
       {'reason': final String reason} => DokanyStatus(
         installed: false,
+        outdated: dokany['outdated'] == true,
         reason: reason,
       ),
       _ => const DokanyStatus(installed: false),
