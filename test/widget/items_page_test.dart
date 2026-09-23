@@ -51,7 +51,7 @@ void main() {
           .protectNew(
             ProtectRequest(
               path: folder.path,
-              encrypt: true,
+              method: ProtectionMethod.encrypt,
               hide: false,
               passwordMode: PasswordMode.master,
             ),

@@ -13,13 +13,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'fake_access_rules.dart';
+
 /// Runs the real app against a temporary data folder, with cheap password
 /// hashing and no native window.
 class AppHarness {
-  AppHarness._(this.root, this.container);
+  AppHarness._(this.root, this.container, this.accessRules);
 
   final Directory root;
   final ProviderContainer container;
+
+  /// Stands in for Windows permission rules (Block access, Read-only).
+  final FakeAccessRules accessRules;
 
   static Future<AppHarness> create({
     AppSettings settings = const AppSettings(),
@@ -27,6 +32,7 @@ class AppHarness {
     final root = await Directory.systemTemp.createTemp('flk_app_');
     final crypto = await CryptoService.create();
     final paths = AppPaths(p.join(root.path, 'appdata'))..ensureExists();
+    final accessRules = FakeAccessRules();
     final container = ProviderContainer(
       overrides: [
         appPathsProvider.overrideWithValue(paths),
@@ -39,10 +45,11 @@ class AppHarness {
         // Temporary folders live under %LOCALAPPDATA% on Windows, which the
         // path guard refuses; tests don't need system folder protection.
         environmentProvider.overrideWithValue(const {}),
+        accessRulesProvider.overrideWithValue(accessRules),
       ],
       retry: (_, _) => null,
     );
-    return AppHarness._(root, container);
+    return AppHarness._(root, container, accessRules);
   }
 
   /// A folder for user files (outside the app data folder).

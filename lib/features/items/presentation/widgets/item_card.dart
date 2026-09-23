@@ -25,7 +25,16 @@ class ItemCardActions {
 }
 
 /// How an item looks, derived from its state.
-enum _Look { locked, hidden, unlocked, missing }
+enum _Look {
+  locked,
+  blocked,
+  readOnly,
+  hidden,
+  unlocked,
+  missing;
+
+  bool get isProtected => this != unlocked && this != missing;
+}
 
 /// One row in the items list.
 class ItemCard extends StatefulWidget {
@@ -55,7 +64,12 @@ class _ItemCardState extends State<ItemCard> {
     final item = widget.item;
     if (!widget.existsOnDisk) return _Look.missing;
     if (!item.isProtected) return _Look.unlocked;
-    return item.encrypt ? _Look.locked : _Look.hidden;
+    return switch (item.method) {
+      ProtectionMethod.encrypt => _Look.locked,
+      ProtectionMethod.blockAccess => _Look.blocked,
+      ProtectionMethod.readOnly => _Look.readOnly,
+      ProtectionMethod.none => _Look.hidden,
+    };
   }
 
   @override
@@ -63,7 +77,8 @@ class _ItemCardState extends State<ItemCard> {
     final item = widget.item;
     final look = _look;
     final tone = switch (look) {
-      _Look.locked => Tone.primary,
+      _Look.locked || _Look.blocked => Tone.primary,
+      _Look.readOnly => Tone.info,
       _Look.hidden => Tone.accent,
       _Look.unlocked => Tone.warning,
       _Look.missing => Tone.danger,
@@ -98,6 +113,8 @@ class _ItemCardState extends State<ItemCard> {
               size: 44,
               badge: switch (look) {
                 _Look.locked => Icons.lock_rounded,
+                _Look.blocked => Icons.block_rounded,
+                _Look.readOnly => Icons.edit_off_rounded,
                 _Look.hidden => Icons.visibility_off_rounded,
                 _Look.unlocked => Icons.lock_open_rounded,
                 _Look.missing => null,
@@ -110,7 +127,7 @@ class _ItemCardState extends State<ItemCard> {
             const SizedBox(width: AppSpacing.md),
             _PrimaryAction(
               look: look,
-              encrypted: item.encrypt,
+              method: item.method,
               enabled: widget.enabled,
               actions: widget.actions,
             ),
@@ -163,13 +180,24 @@ class _Details extends StatelessWidget {
               tone: tone,
               label: switch (look) {
                 _Look.locked => 'Locked',
+                _Look.blocked => 'Blocked',
+                _Look.readOnly => 'Read-only',
                 _Look.hidden => 'Hidden',
                 _Look.unlocked => 'Unlocked',
                 _Look.missing => 'Not found',
               },
             ),
-            if (look == _Look.locked && item.hide)
+            if (look.isProtected && look != _Look.hidden && item.hide)
               const StatusBadge(tone: Tone.accent, label: 'Hidden'),
+            // What "Lock" will do again, for the quick methods.
+            if (look == _Look.unlocked && !item.encrypt)
+              StatusBadge(
+                label: switch (item.method) {
+                  ProtectionMethod.blockAccess => 'Block access',
+                  ProtectionMethod.readOnly => 'Read-only',
+                  _ => 'Hide only',
+                },
+              ),
             if (item.encrypt && item.passwordMode == PasswordMode.custom)
               const StatusBadge(icon: Icons.key_rounded, label: 'Own password'),
             if (item.needsPassword && look == _Look.locked)
@@ -205,34 +233,40 @@ class _Details extends StatelessWidget {
 class _PrimaryAction extends StatelessWidget {
   const _PrimaryAction({
     required this.look,
-    required this.encrypted,
+    required this.method,
     required this.enabled,
     required this.actions,
   });
 
   final _Look look;
-  final bool encrypted;
+  final ProtectionMethod method;
   final bool enabled;
   final ItemCardActions actions;
 
   @override
   Widget build(BuildContext context) {
+    final hideOnly = method == ProtectionMethod.none;
     return switch (look) {
-      _Look.locked || _Look.hidden => FilledButton.tonalIcon(
+      _Look.locked ||
+      _Look.blocked ||
+      _Look.readOnly ||
+      _Look.hidden => FilledButton.tonalIcon(
         onPressed: enabled ? actions.onUnlock : null,
         icon: Icon(
-          encrypted ? Icons.lock_open_rounded : Icons.visibility_rounded,
+          hideOnly ? Icons.visibility_rounded : Icons.lock_open_rounded,
           size: 18,
         ),
-        label: Text(encrypted ? 'Unlock' : 'Show'),
+        label: Text(hideOnly ? 'Show' : 'Unlock'),
       ),
       _Look.unlocked => FilledButton.icon(
         onPressed: enabled ? actions.onLock : null,
-        icon: Icon(
-          encrypted ? Icons.lock_rounded : Icons.visibility_off_rounded,
-          size: 18,
-        ),
-        label: Text(encrypted ? 'Lock' : 'Hide'),
+        icon: Icon(switch (method) {
+          ProtectionMethod.encrypt => Icons.lock_rounded,
+          ProtectionMethod.blockAccess => Icons.block_rounded,
+          ProtectionMethod.readOnly => Icons.edit_off_rounded,
+          ProtectionMethod.none => Icons.visibility_off_rounded,
+        }, size: 18),
+        label: Text(hideOnly ? 'Hide' : 'Lock'),
       ),
       _Look.missing => OutlinedButton.icon(
         onPressed: enabled ? actions.onRemove : null,

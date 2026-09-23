@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../engine/crypto/crypto_service.dart';
 import '../../engine/crypto/kdf_params.dart';
 import '../../engine/engine_runner.dart';
+import '../../platform/access_control.dart';
 import '../storage/app_paths.dart';
 
 /// App folder locations. Overridden in `bootstrap()` (and in tests).
@@ -40,4 +41,9 @@ final nativeWindowProvider = Provider<bool>((ref) => false);
 
 final engineRunnerProvider = Provider<EngineRunner>(
   (ref) => EngineRunner(ref.watch(cryptoProvider)),
+);
+
+/// Windows permission rules (Block access and Read-only). Tests use a fake.
+final accessRulesProvider = Provider<AccessRules>(
+  (ref) => const SystemAccessRules(),
 );

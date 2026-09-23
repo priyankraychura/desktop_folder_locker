@@ -1,5 +1,6 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 
@@ -379,4 +380,32 @@ class _SecurityInfo {
   final Pointer<Void> owner;
   final Pointer<Void> dacl;
   final Pointer<Void> descriptor;
+}
+
+/// The operations the app needs from [AccessControl], as an interface so
+/// tests can replace them.
+abstract interface class AccessRules {
+  /// Why [path] can't get a rule, or `null` if it can.
+  AccessProblem? check(String path);
+
+  Future<void> apply(String path, AccessRule rule);
+
+  Future<void> remove(String path);
+}
+
+/// [AccessRules] backed by the Win32 API. Applying and removing run in a
+/// background isolate, because Windows updates every item inside a folder.
+class SystemAccessRules implements AccessRules {
+  const SystemAccessRules();
+
+  @override
+  AccessProblem? check(String path) => AccessControl.check(path);
+
+  @override
+  Future<void> apply(String path, AccessRule rule) =>
+      Isolate.run(() => AccessControl.apply(path, rule));
+
+  @override
+  Future<void> remove(String path) =>
+      Isolate.run(() => AccessControl.remove(path));
 }

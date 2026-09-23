@@ -90,7 +90,7 @@ void main() {
       await protection.protectNew(
         ProtectRequest(
           path: createFolder('Tax documents 2025', 24).path,
-          encrypt: true,
+          method: ProtectionMethod.encrypt,
           hide: false,
           passwordMode: PasswordMode.master,
         ),
@@ -98,7 +98,7 @@ void main() {
       await protection.protectNew(
         ProtectRequest(
           path: createFolder('Family photos', 120).path,
-          encrypt: true,
+          method: ProtectionMethod.encrypt,
           hide: true,
           passwordMode: PasswordMode.custom,
           customPassword: 'another-strong-password',
@@ -107,15 +107,23 @@ void main() {
       await protection.protectNew(
         ProtectRequest(
           path: createFolder('Game saves', 8).path,
-          encrypt: false,
+          method: ProtectionMethod.none,
           hide: true,
+          passwordMode: PasswordMode.master,
+        ),
+      );
+      await protection.protectNew(
+        ProtectRequest(
+          path: createFolder('Music library', 60).path,
+          method: ProtectionMethod.blockAccess,
+          hide: false,
           passwordMode: PasswordMode.master,
         ),
       );
       final project = await protection.protectNew(
         ProtectRequest(
           path: createFolder('Client project', 40).path,
-          encrypt: true,
+          method: ProtectionMethod.encrypt,
           hide: false,
           passwordMode: PasswordMode.master,
         ),
@@ -136,6 +144,12 @@ void main() {
     ).ignore();
     await tester.pumpAndSettle();
     await capture('06_protect_dialog');
+    await tester.tap(find.text('Block access'));
+    await tester.pumpAndSettle();
+    await capture('07_protect_dialog_block');
+    await tester.tap(find.text('Encrypt  ·  recommended'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Its own password'));
     await tester.tap(find.text('Its own password'));
     await tester.pumpAndSettle();
     await capture('07_protect_dialog_custom');

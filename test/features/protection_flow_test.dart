@@ -9,6 +9,7 @@ import 'package:desktop_folder_locker/features/items/application/items_controlle
 import 'package:desktop_folder_locker/features/items/application/path_guard.dart';
 import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
 import 'package:desktop_folder_locker/features/items/domain/protected_item.dart';
+import 'package:desktop_folder_locker/platform/access_control.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -65,7 +66,7 @@ void main() {
       final item = await protection().protectNew(
         ProtectRequest(
           path: dir.path,
-          encrypt: true,
+          method: ProtectionMethod.encrypt,
           hide: false,
           passwordMode: PasswordMode.master,
         ),
@@ -98,7 +99,7 @@ void main() {
       final item = await protection().protectNew(
         ProtectRequest(
           path: dir.path,
-          encrypt: true,
+          method: ProtectionMethod.encrypt,
           hide: false,
           passwordMode: PasswordMode.custom,
           customPassword: 'item-password',
@@ -153,7 +154,7 @@ void main() {
     final item = await protection().protectNew(
       ProtectRequest(
         path: folder('Secret').path,
-        encrypt: true,
+        method: ProtectionMethod.encrypt,
         hide: false,
         passwordMode: PasswordMode.master,
       ),
@@ -178,7 +179,7 @@ void main() {
     final item = await protection().protectNew(
       ProtectRequest(
         path: folder('Secret').path,
-        encrypt: true,
+        method: ProtectionMethod.encrypt,
         hide: false,
         passwordMode: PasswordMode.master,
       ),
@@ -210,7 +211,7 @@ void main() {
     final item = await protection().protectNew(
       ProtectRequest(
         path: dir.path,
-        encrypt: false,
+        method: ProtectionMethod.none,
         hide: true,
         passwordMode: PasswordMode.master,
       ),
@@ -231,7 +232,7 @@ void main() {
     await protection().protectNew(
       ProtectRequest(
         path: dir.path,
-        encrypt: false,
+        method: ProtectionMethod.none,
         hide: true,
         passwordMode: PasswordMode.master,
       ),
@@ -240,7 +241,7 @@ void main() {
       protection().protectNew(
         ProtectRequest(
           path: p.join(dir.path, 'sub'),
-          encrypt: true,
+          method: ProtectionMethod.encrypt,
           hide: false,
           passwordMode: PasswordMode.master,
         ),
@@ -254,5 +255,91 @@ void main() {
       ),
     );
     expect(items().items, hasLength(1));
+  });
+
+  test('block access adds a permission rule and unlock removes it', () async {
+    final dir = folder('Big project');
+    final item = await protection().protectNew(
+      ProtectRequest(
+        path: dir.path,
+        method: ProtectionMethod.blockAccess,
+        hide: true,
+        passwordMode: PasswordMode.master,
+      ),
+    );
+    expect(item.isProtected, isTrue);
+    expect(dir.existsSync(), isTrue, reason: 'the folder stays in place');
+    expect(harness.accessRules.ruleOn(dir.path), AccessRule.blockAll);
+    expect(protection().lockRequirement(item), LockRequirement.none);
+
+    final outcome = await protection().unlock(item);
+    expect(outcome.item.status, ProtectionStatus.unprotected);
+    expect(outcome.item.unlockedAt, isNotNull);
+    expect(harness.accessRules.ruleOn(dir.path), isNull);
+
+    final again = await protection().lockAgain(outcome.item);
+    expect(again.isProtected, isTrue);
+    expect(again.unlockedAt, isNull);
+    expect(harness.accessRules.ruleOn(dir.path), AccessRule.blockAll);
+  });
+
+  test('read-only uses the read-only rule', () async {
+    final dir = folder('Photos');
+    await protection().protectNew(
+      ProtectRequest(
+        path: dir.path,
+        method: ProtectionMethod.readOnly,
+        hide: false,
+        passwordMode: PasswordMode.master,
+      ),
+    );
+    expect(harness.accessRules.ruleOn(dir.path), AccessRule.readOnly);
+    expect(items().items.single.method, ProtectionMethod.readOnly);
+  });
+
+  test('refused or failed rules leave nothing behind', () async {
+    final dir = folder('Shared');
+    harness.accessRules.problem = AccessProblem.notOwner;
+    await expectLater(
+      protection().protectNew(
+        ProtectRequest(
+          path: dir.path,
+          method: ProtectionMethod.blockAccess,
+          hide: false,
+          passwordMode: PasswordMode.master,
+        ),
+      ),
+      throwsA(
+        isA<ProtectionException>().having(
+          (e) => e.accessProblem,
+          'accessProblem',
+          AccessProblem.notOwner,
+        ),
+      ),
+    );
+    expect(items().items, isEmpty);
+
+    harness.accessRules
+      ..problem = null
+      ..failApply = true;
+    await expectLater(
+      protection().protectNew(
+        ProtectRequest(
+          path: dir.path,
+          method: ProtectionMethod.readOnly,
+          hide: true,
+          passwordMode: PasswordMode.master,
+        ),
+      ),
+      throwsA(
+        isA<ProtectionException>().having(
+          (e) => e.issue,
+          'issue',
+          ProtectionIssue.accessRuleFailed,
+        ),
+      ),
+    );
+    expect(items().items, isEmpty);
+    expect(harness.accessRules.rules, isEmpty);
   });
 }

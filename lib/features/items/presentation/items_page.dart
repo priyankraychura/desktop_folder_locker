@@ -21,7 +21,8 @@ enum ItemFilter { all, locked, unlocked, hidden }
 extension on ItemFilter {
   bool matches(ProtectedItem item) => switch (this) {
     ItemFilter.all => true,
-    ItemFilter.locked => item.isEncryptedNow,
+    ItemFilter.locked =>
+      item.isProtected && item.method != ProtectionMethod.none,
     ItemFilter.unlocked => !item.isProtected,
     ItemFilter.hidden => item.hide && item.isProtected,
   };
@@ -224,7 +225,7 @@ class _Header extends StatelessWidget {
               Text('Protected items', style: context.text.headlineMedium),
               const SizedBox(height: AppSpacing.xxs),
               Text(
-                'Encrypt and hide files and folders. Drag them here to start.',
+                'Encrypt, block or hide files and folders. Drag them here to start.',
                 style: context.text.bodyMedium?.copyWith(
                   color: context.palette.mutedText,
                 ),

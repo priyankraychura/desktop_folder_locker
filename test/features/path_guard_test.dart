@@ -21,7 +21,7 @@ void main() {
     kind: ItemKind.folder,
     itemPath: path,
     vaultPath: vault,
-    encrypt: true,
+    method: ProtectionMethod.encrypt,
     hide: false,
     passwordMode: PasswordMode.master,
     status: vault == null

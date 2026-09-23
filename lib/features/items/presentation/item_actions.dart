@@ -43,12 +43,18 @@ class ItemActions {
     if (path != null) await protectPath(path);
   }
 
-  /// Protects [path] after asking how (encrypt / hide, which password).
+  /// Protects [path] after asking how (method, hiding, which password).
+  ///
+  /// For an item that is already in the list (for example when Explorer's
+  /// "Lock with…" is used on a blocked folder), offers to unlock it or
+  /// locks it again instead.
   Future<void> protectPath(String path) async {
     if (!_ref.read(sessionControllerProvider).isUnlocked) {
       showToast('Unlock the app first.', tone: Tone.warning);
       return;
     }
+    final existing = _ref.read(itemsControllerProvider.notifier).byPath(path);
+    if (existing != null) return _toggle(existing);
     if (_controller.checkPath(path) case final problem?) {
       showToast(pathProblemText(problem), tone: Tone.warning);
       return;
@@ -58,13 +64,14 @@ class ItemActions {
       _context,
       path: path,
       kind: FsUtils.isDirectory(path) ? ItemKind.folder : ItemKind.file,
+      accessProblem: _controller.accessRuleProblem(path),
     );
     if (choice == null) return;
     await _run(() async {
       final item = await _controller.protectNew(
         ProtectRequest(
           path: path,
-          encrypt: choice.encrypt,
+          method: choice.method,
           hide: choice.hide,
           passwordMode: choice.passwordMode,
           customPassword: choice.customPassword,
@@ -136,6 +143,33 @@ class ItemActions {
       _toastProtected(locked);
     });
   }
+
+  Future<void> _toggle(ProtectedItem item) async {
+    if (!_context.mounted) return;
+    final locked = item.isProtected;
+    final confirmed = await showConfirmDialog(
+      _context,
+      title: '“${item.name}” is ${locked ? _stateWord(item) : 'unlocked'}',
+      message: locked
+          ? 'Do you want to unlock it now?'
+          : 'It is already in your list. Do you want to lock it again?',
+      confirmLabel: locked ? 'Unlock' : 'Lock',
+      icon: locked ? Icons.lock_open_rounded : Icons.lock_rounded,
+    );
+    if (!confirmed) return;
+    if (locked) {
+      await unlock(item, openAfter: true);
+    } else {
+      await lockAgain(item);
+    }
+  }
+
+  static String _stateWord(ProtectedItem item) => switch (item.method) {
+    ProtectionMethod.encrypt => 'locked',
+    ProtectionMethod.blockAccess => 'blocked',
+    ProtectionMethod.readOnly => 'read-only',
+    ProtectionMethod.none => 'hidden',
+  };
 
   /// Removes an unlocked (or missing) item from the list.
   Future<void> remove(ProtectedItem item) async {
@@ -214,15 +248,24 @@ class ItemActions {
   }
 
   void _toastProtected(ProtectedItem item) {
-    final message = switch ((item.encrypt, item.hide)) {
-      (true, true) => '“${item.name}” is encrypted and hidden.',
-      (true, false) => '“${item.name}” is locked.',
-      _ => '“${item.name}” is hidden.',
+    final hidden = item.hide ? ' and hidden' : '';
+    final message = switch (item.method) {
+      ProtectionMethod.encrypt when item.hide =>
+        '“${item.name}” is encrypted and hidden.',
+      ProtectionMethod.encrypt => '“${item.name}” is locked.',
+      ProtectionMethod.blockAccess => '“${item.name}” is blocked$hidden.',
+      ProtectionMethod.readOnly => '“${item.name}” is read-only$hidden.',
+      ProtectionMethod.none => '“${item.name}” is hidden.',
     };
     showToast(
       message,
       tone: Tone.success,
-      icon: item.encrypt ? Icons.lock_rounded : Icons.visibility_off_rounded,
+      icon: switch (item.method) {
+        ProtectionMethod.encrypt => Icons.lock_rounded,
+        ProtectionMethod.blockAccess => Icons.block_rounded,
+        ProtectionMethod.readOnly => Icons.edit_off_rounded,
+        ProtectionMethod.none => Icons.visibility_off_rounded,
+      },
       actionLabel: item.hide ? null : 'Show in Explorer',
       onAction: item.hide
           ? null

@@ -3,13 +3,16 @@ import '../engine/engine_exception.dart';
 import '../features/auth/application/session_controller.dart';
 import '../features/items/application/path_guard.dart';
 import '../features/items/application/protection_controller.dart';
+import '../platform/access_control.dart';
 
 /// Turns any error into a short sentence a user can act on.
 String errorText(Object error) => switch (error) {
   EngineException() => _engine(error),
-  ProtectionException(:final issue, :final pathProblem) =>
-    issue == ProtectionIssue.pathNotAllowed && pathProblem != null
+  ProtectionException(:final issue, :final pathProblem, :final accessProblem) =>
+    pathProblem != null
         ? pathProblemText(pathProblem)
+        : accessProblem != null
+        ? accessProblemText(accessProblem)
         : _protection(issue),
   InvalidRecoveryKeyException() =>
     'That recovery key is not correct. Check for typos and try again.',
@@ -39,6 +42,33 @@ String pathProblemText(PathProblem problem) => switch (problem) {
         'remove that item first.',
 };
 
+/// Why Block access or Read-only can't be used, as a full sentence.
+String accessProblemText(AccessProblem problem) => switch (problem) {
+  AccessProblem.unsupported => 'This only works on Windows.',
+  AccessProblem.noPermissionsOnDrive =>
+    'This drive doesn\'t support Windows permissions (for example a FAT32 or '
+        'exFAT USB drive). Use Encrypt instead.',
+  AccessProblem.notOwner =>
+    'You don\'t own this item, so a block might not be removable later. '
+        'Use Encrypt instead.',
+  AccessProblem.noPermissionList =>
+    'This item has unusual Windows permissions, so it can\'t be blocked '
+        'safely. Use Encrypt instead.',
+  AccessProblem.failed =>
+    'Windows did not allow changing the permissions of this item.',
+};
+
+/// The same reasons, short enough for a disabled option.
+String accessProblemShortText(AccessProblem problem) => switch (problem) {
+  AccessProblem.unsupported => 'Only available on Windows.',
+  AccessProblem.noPermissionsOnDrive =>
+    'Not available on this drive (no Windows permissions).',
+  AccessProblem.notOwner => 'Not available: you don\'t own this item.',
+  AccessProblem.noPermissionList =>
+    'Not available: this item has unusual permissions.',
+  AccessProblem.failed => 'Not available: its permissions can\'t be read.',
+};
+
 String _protection(ProtectionIssue issue) => switch (issue) {
   ProtectionIssue.pathNotAllowed => 'This item can\'t be protected.',
   ProtectionIssue.appLocked => 'Unlock ${AppInfo.name} first.',
@@ -52,6 +82,8 @@ String _protection(ProtectionIssue issue) => switch (issue) {
     'Unlock this item before removing it from the list.',
   ProtectionIssue.hideFailed =>
     'Windows did not allow hiding or showing this item.',
+  ProtectionIssue.accessRuleFailed =>
+    'Windows did not allow changing the permissions of this item.',
 };
 
 String _engine(EngineException error) => switch (error.code) {

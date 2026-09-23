@@ -195,55 +195,156 @@ class OptionCard extends StatelessWidget {
     return Semantics(
       checked: selected,
       button: true,
-      child: AnimatedContainer(
+      enabled: enabled,
+      child: AnimatedOpacity(
         duration: AppMotion.fast,
-        decoration: BoxDecoration(
-          color: selected
-              ? colors.background.withValues(alpha: 0.45)
-              : context.colors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(
-            color: selected ? colors.foreground : context.palette.border,
-            width: selected ? 1.6 : 1,
+        opacity: enabled ? 1 : 0.55,
+        child: _card(context, colors),
+      ),
+    );
+  }
+
+  Widget _card(BuildContext context, ToneColors colors) => AnimatedContainer(
+    duration: AppMotion.fast,
+    decoration: BoxDecoration(
+      color: selected
+          ? colors.background.withValues(alpha: 0.45)
+          : context.colors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      border: Border.all(
+        color: selected ? colors.foreground : context.palette.border,
+        width: selected ? 1.6 : 1,
+      ),
+    ),
+    child: Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: enabled ? () => onChanged(!selected) : null,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              IconTile(icon: icon, tone: tone, size: 38),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: context.text.titleSmall),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(description, style: context.text.bodySmall),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              AnimatedSwitcher(
+                duration: AppMotion.fast,
+                child: Icon(
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  key: ValueKey(selected),
+                  size: 22,
+                  color: selected
+                      ? colors.foreground
+                      : context.palette.mutedText,
+                ),
+              ),
+            ],
           ),
         ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
+      ),
+    ),
+  );
+}
+
+/// A compact, radio-like tile for a small grid of choices.
+class ChoiceTile extends StatelessWidget {
+  const ChoiceTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onSelected,
+    super.key,
+    this.tone = Tone.primary,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onSelected;
+  final Tone tone;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.palette.tone(tone);
+    return Semantics(
+      checked: selected,
+      button: true,
+      enabled: enabled,
+      label: title,
+      child: AnimatedOpacity(
+        duration: AppMotion.fast,
+        opacity: enabled ? 1 : 0.55,
+        child: AnimatedContainer(
+          duration: AppMotion.fast,
+          decoration: BoxDecoration(
+            color: selected
+                ? colors.background.withValues(alpha: 0.45)
+                : context.colors.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            onTap: enabled ? () => onChanged(!selected) : null,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  IconTile(icon: icon, tone: tone, size: 38),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            border: Border.all(
+              color: selected ? colors.foreground : context.palette.border,
+              width: selected ? 1.6 : 1,
+            ),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              onTap: enabled ? onSelected : null,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(title, style: context.text.titleSmall),
-                        const SizedBox(height: AppSpacing.xxs),
-                        Text(description, style: context.text.bodySmall),
+                        IconTile(icon: icon, tone: tone, size: 32),
+                        const Spacer(),
+                        Icon(
+                          selected
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          size: 20,
+                          color: selected
+                              ? colors.foreground
+                              : context.palette.mutedText,
+                        ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  AnimatedSwitcher(
-                    duration: AppMotion.fast,
-                    child: Icon(
-                      selected
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      key: ValueKey(selected),
-                      size: 22,
-                      color: selected
-                          ? colors.foreground
-                          : context.palette.mutedText,
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      title,
+                      style: context.text.titleSmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      subtitle,
+                      style: context.text.bodySmall,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
