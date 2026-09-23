@@ -16,6 +16,10 @@ Folder Locker turns a folder or file into an **encrypted vault** (`Name.flk`)
 in the same place. The vault shows a lock icon in Explorer. Double-click it,
 type your password, and your folder comes back.
 
+A folder can also become an **encrypted drive** (`Name.flkd`). Unlock it and
+it opens as a drive such as `V:`. Its files are decrypted in memory only
+while programs use them, so nothing unencrypted is ever written to the disk.
+
 It works like Anvi Folder Locker, but it uses real encryption instead of a
 kernel driver. Your files stay protected even if someone copies them or takes
 the disk out of the PC, and the app can be built and shipped for $0.
@@ -23,8 +27,10 @@ the disk out of the PC, and the app can be built and shipped for $0.
 | Protected items | Protect dialog |
 |---|---|
 | ![Protected items](docs/screenshots/05_items.png) | ![Protect dialog](docs/screenshots/06_protect_dialog.png) |
-| **Unlock dialog** | **Dark mode** |
-| ![Unlock dialog](docs/screenshots/08_unlock_dialog.png) | ![Dark mode](docs/screenshots/11_items_dark.png) |
+| **Open as a drive** | **Unlock dialog** |
+| ![Open as a drive](docs/screenshots/07_protect_dialog_drive.png) | ![Unlock dialog](docs/screenshots/08_unlock_dialog.png) |
+| **Settings** | **Dark mode** |
+| ![Settings](docs/screenshots/09_settings.png) | ![Dark mode](docs/screenshots/11_items_dark.png) |
 | **Setup** | **Lock screen** |
 | ![Setup](docs/screenshots/01_setup.png) | ![Lock screen](docs/screenshots/13_lock.png) |
 
@@ -35,6 +41,12 @@ shown are temporary test folders.</sub>
 
 - **Encrypt** folders and files into a single `.flk` vault. It uses
   XChaCha20-Poly1305 and Argon2id, from [libsodium](https://libsodium.org).
+- **Open as a drive** (new in 1.2): an encrypted folder opens as a drive
+  such as `V:`, and nothing unencrypted is written to the disk. After the
+  first lock, opening and locking it are instant at any size, and locking
+  needs no password. It uses the free
+  [Dokany](https://github.com/dokan-dev/dokany) driver. See
+  [docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md).
 - **Block access** or make items **Read-only**, instantly, even for huge
   folders. The item stays in place, and a Windows permission rule stops
   anyone from opening it (or from changing it).
@@ -76,13 +88,17 @@ shown are temporary test folders.</sub>
    - **Read-only**, or
    - **Hide only**.
 
-   You can also hide it with any of these.
+   You can also hide it with any of these. With **Encrypt**, a folder can
+   open as **a folder** or as **a drive**.
 3. With **Encrypt**, the folder becomes `Name.flk`, with a lock icon, in the
    same place. The original files are deleted only after the vault has been
-   verified. With **Block access** or **Read-only**, it stays where it is
-   and Windows refuses to open it (or to change it).
+   verified. As a drive, it becomes the vault folder `Name.flkd` instead.
+   With **Block access** or **Read-only**, it stays where it is and Windows
+   refuses to open it (or to change it).
 4. Double-click `Name.flk` to get the password dialog. The folder is
-   restored and opened.
+   restored and opened. A drive vault opens as a drive (for example `V:`)
+   instead: click **Open** in the app, or double-click `vault.flk` inside
+   `Name.flkd`.
 5. Click **Lock** in the app, or **Lock all items** in the menu of its icon
    next to the clock, to lock it again. The app can remind you about
    unlocked items, lock them again by itself, and offer to lock them when
@@ -101,6 +117,12 @@ The app is not published yet. To try it:
 The installer is not code-signed yet (planned in Phase 4), so Windows
 SmartScreen warns about it. Click **More info → Run anyway**.
 
+To open encrypted folders as drives, also install
+[Dokany](https://github.com/dokan-dev/dokany/releases/latest) (free). Take
+the x64 installer (`Dokan_x64.msi`). It needs administrator rights once,
+because it installs a driver. The installer's last page offers the link,
+and **Settings → Encrypted drives** shows whether it's ready.
+
 ## Build from source
 
 Requirements:
@@ -111,13 +133,23 @@ Requirements:
 - Visual Studio 2022 or 2026 with the **Desktop development with C++**
   workload. Flutter needs it, and the `sodium` package uses it to compile
   libsodium from source automatically on the first build.
+- [Rust](https://rustup.rs) (stable, the default MSVC toolchain) for the
+  drive helper in `native/`.
 
 ```powershell
+cd native; cargo build --release; cd ..   # the drive helper
 flutter pub get
 flutter run -d windows            # run in debug mode
 flutter test                      # run the tests
 flutter build windows --release   # build\windows\x64\runner\Release
 ```
+
+`flutter build windows` copies the release helper
+(`native\target\release\folder_locker_drive.exe`) next to the app, if it
+has been built. To try a debug build of the helper instead, set
+`FOLDER_LOCKER_DRIVE` to its path. `cargo test` in `native/` runs the
+helper's tests; the drive test needs Dokany (see
+[docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md)).
 
 To build the installer, install [Inno Setup 6](https://jrsoftware.org/isinfo.php),
 then:
@@ -127,15 +159,17 @@ then:
 copy C:\Windows\System32\msvcp140.dll     build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140.dll   build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140_1.dll build\windows\x64\runner\Release
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.1.0 installer\folder_locker.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\folder_locker.iss
 ```
 
 The installer is written to `build\installer`. CI runs all these steps on
 every push.
 
 You can develop the engine and the UI on Linux or macOS too: `flutter test`
-works there, and the Windows-only parts (registry, file attributes) do
-nothing. To regenerate the screenshots:
+and `cargo test` work there, and the Windows-only parts (registry, file
+attributes, drives) do nothing. Build the helper with `cargo build` in
+`native/` first, so the app's tests can talk to it. To regenerate the
+screenshots:
 
 ```sh
 SCREENSHOTS_DIR=docs/screenshots SCREENSHOTS_SCALE=1 flutter test test/visual
@@ -169,8 +203,13 @@ removes the disk. Any change to a vault is detected.
   another operating system ignores it.
 - **While an item is unlocked**, its files are normal files on disk. Lock it
   again when you're done. After locking, the deleted originals can sometimes
-  be recovered with forensic tools (less likely on SSDs). Phase 2 removes
-  this by opening vaults as a virtual drive.
+  be recovered with forensic tools (less likely on SSDs). **Open as a
+  drive** avoids this: a drive vault is never decrypted to the disk.
+- **Drive vaults** need Dokany. While a drive is open, every program running
+  as you can read it, and deleting on it is permanent (no Recycle Bin).
+  Without the password, the number of files, their sizes and dates can be
+  seen, but not their names or contents. Details are in
+  [docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md).
 - The vault keeps file contents, names, dates and the read-only, hidden and
   system attributes. It doesn't keep NTFS permissions or alternate data
   streams. Folders with symbolic links or junctions are refused.
@@ -178,7 +217,8 @@ removes the disk. Any change to a vault is detected.
   an independent security audit**.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the vault format and
-the security model.
+the security model, and [docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md) for drive
+vaults.
 
 ## Project structure
 
@@ -194,8 +234,9 @@ lib/
   engine/                vault engine: pure Dart + libsodium, no Flutter
     crypto/              libsodium wrapper, Argon2id settings, recovery key
     format/              .flk header, key slots, chunked encryption, archive
-    vault/               write / read vaults
+    vault/               write / read vaults, drive vault headers
     operations/          lock, unlock, re-key, crash journal
+    drive/               the drive helper's client, drive lock and decrypt
   platform/              Windows: registry, FFI, single instance, shell
   features/
     auth/                master password, lock screen, auto-lock
@@ -204,6 +245,10 @@ lib/
     setup/               first-run onboarding
     shell/               home window, sidebar, launch arguments
 test/                    engine, feature, widget and screenshot tests
+native/                  the drive helper, in Rust (Cargo workspace)
+  vault2/                drive vault format: keys, names, contents, tree
+  drive/                 folder_locker_drive.exe: protocol, Dokany drive
+  vendor/dokan/          Dokany bindings for Rust, with a fix
 installer/               Inno Setup script
 tool/                    icon generator
 docs/                    roadmap, architecture, screenshots
@@ -219,7 +264,7 @@ widgets).
 |---|---|---|
 | 1 | Core app: encrypt, hide, Explorer basics, installer | Code complete, needs testing on a real Windows PC |
 | 1.1 | Block access, Read-only, tray icon, reminders, auto re-lock, new recovery key | Code complete, tray and Explorer behaviour need a real PC |
-| 2 | Open vaults as a virtual drive (Dokany), no plain files on disk | Planned |
+| 2 | Open vaults as a virtual drive (Dokany), no plain files on disk | Code complete, the drive is tested on Windows in CI, the app needs a real PC |
 | 3 | Explorer plug-in: locked folders stay real folders | Planned |
 | 4 | Publishing: GitHub Releases, Microsoft Store, free code signing | Planned |
 

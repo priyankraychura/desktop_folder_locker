@@ -5,6 +5,8 @@ This document explains how Folder Locker is built. It covers:
 - the code layers and folder structure;
 - the `.flk` vault format and the key hierarchy;
 - how operations stay safe when something goes wrong;
+- drive vaults, which open as a Windows drive (their format and the helper
+  program are in [DRIVE_VAULT.md](DRIVE_VAULT.md));
 - the Windows integration;
 - the security model and the tests.
 
@@ -19,9 +21,10 @@ This document explains how Folder Locker is built. It covers:
 │ features/*/domain + data     │ core/  theme, widgets, storage │
 ├──────────────────────────────┴────────────────────────────────┤
 │ engine/   vault format + operations (pure Dart + libsodium)   │
-├───────────────────────────────────────────────────────────────┤
-│ platform/ Windows: registry, FFI, single instance, shell      │
-└───────────────────────────────────────────────────────────────┘
+├──────────────────────────────┬────────────────────────────────┤
+│ platform/ Windows: registry, │ native/ drive helper (Rust,    │
+│ FFI, single instance, shell  │ a separate process) + Dokany   │
+└──────────────────────────────┴────────────────────────────────┘
 ```
 
 Rules that keep the code consistent:
@@ -41,9 +44,12 @@ Rules that keep the code consistent:
   tokens, `AppPalette` tones and the Material 3 theme. This keeps every
   screen consistent.
 - **Dependencies are injected.** `core/di/core_providers.dart` holds the
-  app-wide providers: paths, crypto, engine runner, settings, environment.
-  Tests override them, for example with temporary folders and cheap
-  Argon2id settings.
+  app-wide providers: paths, crypto, engine runner, drive helper, settings,
+  environment. Tests override them, for example with temporary folders,
+  cheap Argon2id settings and a fake drive helper.
+- **The drive helper is a separate program.** Only
+  `engine/drive/drive_helper.dart` knows how to start and talk to it;
+  everything else uses the `DriveService` interface (section 5.3).
 
 ## 2. Startup
 
@@ -74,6 +80,10 @@ first.
 
 A vault is one file: a 4096-byte header, then the encrypted payload.
 Integers are little-endian.
+
+Drive vaults (format version 2) use the same header, as `vault.flk` inside
+a `Name.flkd` folder, and store each file on its own next to it (section
+5.3 and [DRIVE_VAULT.md](DRIVE_VAULT.md)).
 
 ### 3.1 Header
 
@@ -174,7 +184,9 @@ per vault:  data key (32 random bytes)
 ```
 
 Each vault has slot 1 *or* slot 2, depending on the item's password mode,
-plus slot 3.
+plus slot 3. A drive vault has the same slots in its `vault.flk`. Its data
+key goes to the drive helper, which derives its own keys from it
+([DRIVE_VAULT.md §2.2](DRIVE_VAULT.md#22-keys)).
 
 - **`keystore.json` holds no secret.** It contains:
   - the Argon2id settings and salt;
@@ -293,6 +305,45 @@ These methods leave the item in place and add one Windows permission entry
 - `AppLocker` is the only way the app gets locked (sidebar, `Ctrl+L`, tray
   menu, auto-lock). With "Lock them when the app locks" on, it locks
   unlocked items first, while their keys are still in memory.
+- Open drives count as unlocked items. A drive with files open in
+  programs is skipped and tried again later, like an item with a file in
+  use (section 5.3).
+
+### 5.3 Drive vaults
+
+Items with `ProtectionMethod.drive` are folders that become `Name.flkd`,
+opened as a drive through Dokany. The format, the helper's protocol and
+the security notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
+
+- **The helper.** `HelperDriveService` starts `folder_locker_drive.exe`
+  (next to the app) on first use, and talks to it over its standard input
+  and output. The data key goes into the pipe from protected memory, and
+  the buffer is wiped. When the app exits, even by a crash, the pipe
+  closes and the helper closes every drive.
+- **Lock** (`DriveOperations.lock`) uses the lock journal of section 5:
+  the folder is renamed to `Name.<id>.flk-locking`, the app writes
+  `Name.<id>.flkd-partial\vault.flk` with the key slots, the helper
+  encrypts every file and checks it, the vault folder is renamed into
+  place, and then the original is deleted. Startup recovery treats the
+  partial vault folder like a partial `.flk` file.
+- **Open** unwraps the data key in a background isolate
+  (`EngineRunner.openDriveKey`) and asks the helper to mount the vault.
+  The item is saved as unlocked with its `mountPoint`; its vault stays
+  (`hasVault`), so it can't leave the list.
+- **Lock again** closes the drive and needs no key. If programs have files
+  open on it, `lockAgain` throws `DriveErrorCode.inUse`, unless `force` is
+  set: the card then asks "Close anyway", and automatic locking tries again
+  later.
+- **Drives that close by themselves** (ejected in Explorer, or the helper
+  stopped) come as `unmounted` events, and the item shows as locked. At
+  startup, items still marked as open are reset to locked: no drive
+  outlives the app.
+- **Decrypt to a folder** (`DriveOperations.export`) uses the unlock
+  journal: the helper decrypts into `Name.<id>.flk-restoring` and checks
+  it, the folder is renamed into place, and the vault is deleted.
+- **Passwords** work as for `.flk` vaults: a new master password or
+  recovery key rewrites the key slots in `vault.flk`, even while the drive
+  is open.
 
 ## 6. App data
 
@@ -334,6 +385,11 @@ recovery key.
 
   On Windows 11 the "Lock with…" entry appears under **Show more options**.
   A top-level entry needs a shell extension (Phase 3).
+- **Drive vaults.** `vault.flk` inside a `Name.flkd` folder is a `.flk`
+  file, so it has the vault icon and double-clicking it asks for the
+  password and opens the drive. "Lock with…" on a `.flkd` folder does the
+  same. The drive itself comes from Dokany through the helper, which loads
+  `dokan2.dll` only from System32.
 - **Hide** sets the Hidden and System attributes (`SetFileAttributesW`
   through FFI). Explorer's default settings then hide the item.
 - **Block access / Read-only** use `GetNamedSecurityInfoW` and
@@ -370,11 +426,13 @@ recovery key. Any change to a vault is detected before its data is used.
 **Not protected:**
 
 - **Unlocked items.** Their files are normal files while they are unlocked.
+  An open drive vault is decrypted only in memory, but every program
+  running as the user can read the drive while it is open.
 - **A compromised PC.** Malware, or anyone using the PC while the app is
   unlocked, can read what you can read.
 - **Deleted originals.** After locking, the deleted original files may stay
-  recoverable with forensic tools until they are overwritten. Phase 2
-  (virtual drive) avoids writing plain files.
+  recoverable with forensic tools until they are overwritten. Drive vaults
+  avoid this after the first lock: opening one never writes plain files.
 - **Hide-only items.** Hiding is convenience, not security.
 - **Blocked and read-only items** against their owner, administrators or
   another operating system. The permission entry stops other accounts and
@@ -383,7 +441,8 @@ recovery key. Any change to a vault is detected before its data is used.
 **Memory hygiene:**
 
 - Keys live in libsodium `SecureKey`s (locked, guarded memory) and are
-  disposed after use.
+  disposed after use. The drive helper keeps a vault's keys only while its
+  drive is open, and wipes them afterwards.
 - Temporary key copies are zeroed.
 - Passwords are Dart strings, so they can't be wiped reliably. They are kept
   only as long as needed.
@@ -395,14 +454,18 @@ independently audited**.
 
 | Folder | What it covers |
 |---|---|
-| `test/engine` | byte encoding, key slots, header A/B areas, archive paths, crypto; lock/unlock round trips with nested folders, Unicode names, chunk-boundary sizes and empty files; tamper and truncation detection; startup recovery of interrupted locks and unlocks; cancel; the isolate runner |
-| `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); reminders, automatic re-locking and locking items with the app; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
+| `test/engine` | byte encoding, key slots, header A/B areas, archive paths, crypto; lock/unlock round trips with nested folders, Unicode names, chunk-boundary sizes and empty files; tamper and truncation detection; startup recovery of interrupted locks and unlocks; cancel; the isolate runner; the real drive helper (import, check, export, a wrong key) |
+| `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); drive items (with a fake helper): lock, open, close, drives in use, decrypt to a folder, restarts; reminders, automatic re-locking and locking items with the app; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
 | `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files (Windows only, run in CI) |
-| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove; the protect dialog's methods; the tray icon following the items and running its menu |
+| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove, and a drive's open, close and decrypt; the protect dialog's methods and "Open it as"; the Dokany row in Settings; the tray icon following the items and running its menu |
+| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)) |
 | `test/visual` | renders every main screen to PNG (only when `SCREENSHOTS_DIR` is set) |
 
 The tests use cheap Argon2id settings (`KdfPolicy.fast`) and temporary
 folders. On every push, CI runs:
 
-- on Linux: format check, `flutter analyze` and all tests;
-- on Windows: the tests, the release build and the installer.
+- on Linux: format checks, `flutter analyze`, Clippy, and the Rust and
+  Flutter tests;
+- on Windows: Clippy, the release helper, the Flutter tests, the release
+  build and the installer;
+- on Windows with Dokany installed: the drive end-to-end test.

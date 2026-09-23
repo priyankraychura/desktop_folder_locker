@@ -89,8 +89,8 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 **Known limitations (fixed in later phases)**
 
 - While a folder is unlocked, its files are normal files on disk. The deleted
-  originals can sometimes be recovered with forensic tools. Phase 2 removes
-  this by never writing unencrypted files to disk.
+  originals can sometimes be recovered with forensic tools. Phase 2 adds
+  drive vaults, which never write unencrypted files to disk.
 - File permissions (ACLs) and alternate data streams are not stored in the
   vault. Read-only, hidden and system attributes are restored.
 - Folders that contain symbolic links or junctions are refused, so nothing is
@@ -135,16 +135,69 @@ that are left unlocked.
 6. **Settings → Recovery key → New key…** → save the key → *Forgot
    password?* on the lock screen accepts only the new key.
 
-## Phase 2: open vaults as a virtual drive (Dokany) ⏳
+## Phase 2: open vaults as a virtual drive (Dokany) 🧪
 
-- Small helper program (C#/.NET or Rust) using **Dokany** (LGPL, driver already
-  signed). Flutter controls it through a named pipe (JSON messages).
-- Vault format v2: directory-based, each file encrypted separately with
-  encrypted names, random access, like Cryptomator.
-- Unlock mounts the vault as a drive (for example `V:`); lock unmounts it. No
-  unencrypted data is written to disk.
-- Users install Dokany once (bundled in the installer or
-  `winget install dokan-dev.dokany`).
+An encrypted folder that opens as a drive, so nothing unencrypted is ever
+written to the disk. The format, the helper's protocol and the security
+notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
+
+| # | Milestone | What it contains | Status |
+|---|-----------|------------------|--------|
+| 2a | Vault format v2 | `Name.flkd` folder: the `.flk` header and key slots (`vault.flk`) and one encrypted file per file. Encrypted names (a random IV per folder, long names), 64 KiB blocks with random access, holes, case-insensitive lookups that keep the case | ✅ unit tests on Linux and Windows |
+| 2b | Drive helper | `folder_locker_drive.exe`, in Rust: JSON lines over stdin/stdout, import and export with a full check, the Dokany file system, closes every drive when the app goes away, runs without Dokany and finds it once it's installed | ✅ end-to-end drive test on Windows with Dokany in CI |
+| 2c | App integration | "Open it as a folder / a drive" when encrypting a folder; Open and Lock on the card, with the drive letter; Decrypt to a folder; the crash journal; drives closed from outside; Settings → Encrypted drives | ✅ logic and UI tests · 🧪 on a real PC |
+| 2d | Packaging | The helper next to the app (CMake and the installer); the Dokany download link in the installer and in Settings; version 1.2.0 | 🧪 |
+
+**Changes from the first plan**
+
+- **Rust, not C#/.NET**: one small exe with nothing to install, and memory
+  that can be wiped.
+- **Standard input and output, not a named pipe**: only the app that
+  started the helper can talk to it, and the helper knows right away when
+  the app is gone.
+- **Dokany is linked, not bundled**: its installer puts a driver in
+  Windows, which needs administrator rights, while Folder Locker installs
+  per user without them. The installer and Settings link to its download.
+
+**Limits of drive vaults**
+
+- They need Dokany, installed once with administrator rights.
+- Without the password, the number of files and folders, the sizes and the
+  dates can be seen (not names or contents).
+- The drive has no permissions, alternate data streams or Recycle Bin.
+- A few changes to the stored files are not detected: whole blocks set to
+  zeros, a file cut at a block boundary, whole files swapped or put back to
+  an older version (see DRIVE_VAULT.md §5).
+- Only folders become drives; a single file is locked into a `.flk` vault.
+
+**Manual test checklist for Phase 2 (Windows 10/11)**
+
+1. Without Dokany: **Settings → Encrypted drives** says it's missing and
+   offers **Get Dokany**. The protect dialog shows the same link under
+   "A drive".
+2. Install Dokany (`Dokan_x64.msi`), then **Check again** in Settings →
+   "Ready", without restarting the app.
+3. Protect a folder → **Encrypt** → Open it as **A drive** → `Name.flkd`
+   appears in its place.
+4. **Open** → a drive such as `V:` opens in Explorer with the files. The
+   card shows "Open as V:".
+5. On the drive: edit and save a document in its program, copy a large
+   file in, rename, move and delete files, and create folders. Explorer
+   says deleting is permanent.
+6. Look into `Name.flkd\data` → only scrambled names, and no file opens.
+7. **Lock** → the drive goes away without asking for a password. **Open**
+   again → every change is there.
+8. Open a document from the drive in its program, then **Lock** → the app
+   asks before closing the drive. **Cancel**, close the program, then
+   **Lock** again → it closes without asking.
+9. Eject the drive in Explorer → the card shows Locked.
+10. Open a drive, then end Folder Locker in Task Manager → the drive goes
+    away. Start the app again → the item shows Locked.
+11. Double-click `vault.flk` inside `Name.flkd` → the password dialog
+    opens it as a drive.
+12. **⋯ → Decrypt to a folder…** → the normal folder is back and
+    `Name.flkd` is gone.
+13. Change the master password → drive vaults open with the new one.
 
 ## Phase 3: Explorer plug-in (C++ shell extension) ⏳
 
@@ -181,3 +234,8 @@ that are left unlocked.
 | Block access with one "deny Everyone" permission rule, only on items the user owns | Instant even for huge folders; the owner can always remove it, so nobody is locked out for good |
 | Tray icon written in the runner (C++) instead of a plugin | About 250 lines, no extra dependency, and notifications work through the tray icon without registering the app |
 | New recovery key: save the key first, then re-seal vaults, and finish later if needed | The old key must stop working right away; each vault update is crash-safe on its own |
+| Drive vaults store one encrypted file per file (like Cryptomator and gocryptfs) | Random access: after the first lock, opening and locking are instant at any size, and a change rewrites only the blocks it touches |
+| A helper program in Rust for drives, started by the app and talking over stdin/stdout | One small exe with nothing to install; keys can be wiped; nobody else can talk to it; every drive closes when the app goes away |
+| Dokany for the drive, installed by the user | Free, open source (LGPL) and already signed by Microsoft, so there is no driver of our own; its installer needs administrator rights, so ours only links to it |
+| Passwords stay in the app; the helper only gets a vault's data key | One place for Argon2id, key slots and the recovery key, shared by both kinds of vault |
+| The dokan Rust bindings are vendored with a small fix | The published version crashed on requests for handles the file system never opened; the fix is listed in `native/vendor/dokan/PATCHES.md` |
