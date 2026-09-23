@@ -23,7 +23,7 @@ use windows::Win32::System::Com::{
     CoTaskMemAlloc, CoTaskMemFree, IBindCtx, IClassFactory, IClassFactory_Impl,
 };
 use windows::Win32::System::LibraryLoader::GetModuleFileNameW;
-use windows::Win32::System::SystemServices::DLL_PROCESS_ATTACH;
+use windows::Win32::System::SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
 use windows::Win32::System::Threading::{
     CreateProcessW, CREATE_DEFAULT_ERROR_MODE, PROCESS_INFORMATION, STARTUPINFOW,
 };
@@ -58,15 +58,26 @@ static OBJECTS: AtomicUsize = AtomicUsize::new(0);
 static LOCKS: AtomicIsize = AtomicIsize::new(0);
 
 /// The user's items, shared by all objects.
+static STATE: OnceLock<State> = OnceLock::new();
+
 fn state() -> &'static State {
-    static STATE: OnceLock<State> = OnceLock::new();
     STATE.get_or_init(State::for_user)
 }
 
 #[no_mangle]
-extern "system" fn DllMain(module: HINSTANCE, reason: u32, _reserved: *mut c_void) -> BOOL {
-    if reason == DLL_PROCESS_ATTACH {
-        MODULE.store(module.0, Ordering::Relaxed);
+extern "system" fn DllMain(module: HINSTANCE, reason: u32, reserved: *mut c_void) -> BOOL {
+    match reason {
+        DLL_PROCESS_ATTACH => MODULE.store(module.0, Ordering::Relaxed),
+        // Unloaded while the process goes on (Explorer unloads plug-ins it
+        // hasn't used for a while): statics aren't dropped, so let go of
+        // the change notification and the list. No object is left to use
+        // them.
+        DLL_PROCESS_DETACH if reserved.is_null() => {
+            if let Some(state) = STATE.get() {
+                state.release();
+            }
+        }
+        _ => {}
     }
     true.into()
 }

@@ -247,6 +247,12 @@ impl State {
         self.fresh(|cache| (cache.items.clone(), cache.settings))
     }
 
+    /// Lets go of the change notification and the files read so far. The
+    /// next question reads the files again.
+    pub fn release(&self) {
+        *self.cache.lock().unwrap_or_else(PoisonError::into_inner) = Cache::default();
+    }
+
     fn fresh<T>(&self, read: impl FnOnce(&Cache) -> T) -> T {
         let mut cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
         let now = Instant::now();
@@ -441,6 +447,11 @@ mod tests {
         fs::write(dir.path().join(ITEMS_FILE), r#"{"items": []}"#).unwrap();
         state.cache.lock().unwrap().checked = None;
         assert!(state.items().is_empty());
+
+        // After letting go, everything is read again.
+        fs::write(dir.path().join(ITEMS_FILE), LIST).unwrap();
+        state.release();
+        assert_eq!(state.items().len(), 3);
     }
 
     #[cfg(windows)]

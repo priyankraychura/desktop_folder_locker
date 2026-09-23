@@ -280,7 +280,7 @@ widgets).
 | 1 | Core app: encrypt, hide, Explorer basics, installer | Code complete, needs testing on a real Windows PC |
 | 1.1 | Block access, Read-only, tray icon, reminders, auto re-lock, new recovery key | Code complete, tray and Explorer behaviour need a real PC |
 | 2 | Open vaults as a virtual drive (Dokany), no plain files on disk | Code complete, the drive is tested on Windows in CI, the app needs a real PC |
-| 3 | Explorer plug-in: menus that know each item, lock badges, locked folders that ask for the password | In progress |
+| 3 | Explorer plug-in: menus that know each item, lock badges, locked folders that ask for the password | Code complete, the menu and badge are tested in Explorer's own code in CI, the app needs a real PC; Windows 11's first menu level ships with Phase 4's signing |
 | 4 | Publishing: GitHub Releases, Microsoft Store, free code signing | Planned |
 
 Details are in [docs/PLAN.md](docs/PLAN.md).

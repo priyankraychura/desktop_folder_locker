@@ -145,8 +145,9 @@ jobs:
       # signed (Phase 4). Until then it's built, signed with a throwaway
       # certificate that only this machine trusts, installed next to the
       # app, and checked: Windows makes the command through the package.
+      # Windows PowerShell: its Appx cmdlets are the dependable ones.
       - name: Test the Windows 11 menu package
-        shell: pwsh
+        shell: powershell
         run: |
           $release = Resolve-Path 'build\windows\x64\runner\Release'
           $publisher = 'CN=Folder Locker Test'

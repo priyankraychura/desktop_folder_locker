@@ -35,6 +35,8 @@ function Find-SdkTool([string] $Name) {
 }
 
 New-Item -ItemType Directory -Force $Destination | Out-Null
+# Full paths: .NET and the tools don't know PowerShell's current folder.
+$Destination = (Resolve-Path $Destination).Path
 $work = Join-Path $Destination 'package'
 Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $work | Out-Null
@@ -43,11 +45,12 @@ Copy-Item -Recurse (Join-Path $PSScriptRoot 'Assets') $work
 $manifest = Get-Content -Raw (Join-Path $PSScriptRoot 'AppxManifest.xml')
 $manifest = $manifest.Replace('$PUBLISHER$', [Security.SecurityElement]::Escape($Publisher))
 $manifest = $manifest.Replace('$VERSION$', "$Version.0")
-Set-Content -Path (Join-Path $work 'AppxManifest.xml') -Value $manifest -Encoding utf8NoBOM
+# UTF-8 without a byte order mark, in Windows PowerShell and PowerShell 7.
+[IO.File]::WriteAllText((Join-Path $work 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))
 
 # The tools' messages go to the console; only the package's path is output.
 # /nv: the app it points to isn't in the package.
-$package = Join-Path (Resolve-Path $Destination) 'FolderLocker-ExplorerMenu.msix'
+$package = Join-Path $Destination 'FolderLocker-ExplorerMenu.msix'
 & (Find-SdkTool 'makeappx.exe') pack /d $work /p $package /nv /o | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed ($LASTEXITCODE)" }
 

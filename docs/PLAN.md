@@ -202,7 +202,7 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
     `Name.flkd` is gone.
 13. Change the master password → drive vaults open with the new one.
 
-## Phase 3: Explorer plug-in 🚧
+## Phase 3: Explorer plug-in 🧪
 
 Folder Locker feels built into Explorer: menus that know each item, locked
 items that look locked, and locked folders that ask for the password when
@@ -294,3 +294,7 @@ opened.
 | Dokany comes with the installer, which installs for all users by default | Installing a driver needs administrator rights anyway, so one prompt covers everything, and nobody has to find a download. The version is pinned and checked by SHA-256, and it's the one CI tests the drive with. The app can install the same copy later |
 | Passwords stay in the app; the helper only gets a vault's data key | One place for Argon2id, key slots and the recovery key, shared by both kinds of vault |
 | The dokan Rust bindings are vendored with a small fix | The published version crashed on requests for handles the file system never opened; the fix is listed in `native/vendor/dokan/PATCHES.md` |
+| The Explorer plug-in only reads the app's files and starts the app | It runs inside Explorer, so it must stay small and never crash it: Rust, every error turned into an error code, and the real work done by the app with its usual dialogs and checks |
+| One `IExplorerCommand` for both menus | Explorer asks it for the title and state, so the entry follows each item. The classic menu finds it through the per-user `ExplorerCommandHandler`, Windows 11's first level through a package |
+| The lock badge is an icon overlay, registered for the machine | The only way to badge items in Explorer. Windows reads overlays only from `HKLM` and uses the first 15 by name, hence the installer and the leading space |
+| The plug-in answers from memory, refreshed by a change notification | Explorer asks about every file it shows; the notification on the app's folder keeps badges right the moment the app changes an item |
