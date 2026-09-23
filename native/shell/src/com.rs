@@ -39,6 +39,11 @@ use crate::state::State;
 
 /// The right-click command, `{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}`.
 pub const CLSID_MENU: GUID = GUID::from_u128(0x3c1c048e_1c62_4b0b_87ac_55edad0e97bb);
+/// The same command for Windows 11's first menu level, which comes from a
+/// package (`installer/sparse`): `{70A5D511-629B-4DF6-81E3-48CBA421BF7E}`.
+/// Its own id, so the package and the per-user entry never stand in for
+/// each other.
+pub const CLSID_MENU_PACKAGED: GUID = GUID::from_u128(0x70a5d511_629b_4df6_81e3_48cba421bf7e);
 /// The lock badge, `{38F771FD-E77E-4105-A560-9E02A7B507D5}`.
 pub const CLSID_BADGE: GUID = GUID::from_u128(0x38f771fd_e77e_4105_a560_9e02a7b507d5);
 
@@ -81,7 +86,7 @@ pub unsafe extern "system" fn DllGetClassObject(
         }
         unsafe { *object = std::ptr::null_mut() };
         let clsid = unsafe { *clsid };
-        if clsid != CLSID_MENU && clsid != CLSID_BADGE {
+        if ![CLSID_MENU, CLSID_MENU_PACKAGED, CLSID_BADGE].contains(&clsid) {
             return CLASS_E_CLASSNOTAVAILABLE;
         }
         let factory: IClassFactory = Factory {
@@ -146,7 +151,7 @@ impl IClassFactory_Impl for Factory_Impl {
                 return Err(CLASS_E_NOAGGREGATION.into());
             }
             let created: IUnknown = match self.clsid {
-                CLSID_MENU => MenuCommand { _live: Live::new() }.into(),
+                CLSID_MENU | CLSID_MENU_PACKAGED => MenuCommand { _live: Live::new() }.into(),
                 CLSID_BADGE => Badge { _live: Live::new() }.into(),
                 _ => return Err(CLASS_E_CLASSNOTAVAILABLE.into()),
             };

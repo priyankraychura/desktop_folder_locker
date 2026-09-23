@@ -13,6 +13,8 @@ Writes:
                                            next to the Explorer plug-in)
   assets/icons/app_icon.png                512 px previews (README)
   assets/icons/vault_icon.png
+  installer/sparse/Assets/*.png            logos of the Windows 11 menu
+                                           package
 
 Shapes are drawn at 1024 px and scaled down, so every size is smooth.
 Requires Pillow (pip install pillow).
@@ -178,6 +180,10 @@ def main():
     preview.parent.mkdir(parents=True, exist_ok=True)
     app.resize((512, 512), Image.LANCZOS).save(preview)
     vault_icon().resize((512, 512), Image.LANCZOS).save(preview.with_name("vault_icon.png"))
+    logos = ROOT / "installer" / "sparse" / "Assets"
+    logos.mkdir(parents=True, exist_ok=True)
+    for name, size in (("StoreLogo", 50), ("Square150x150Logo", 150), ("Square44x44Logo", 44)):
+        app.resize((size, size), Image.LANCZOS).save(logos / f"{name}.png")
     print("Icons written to", resources)
 
 

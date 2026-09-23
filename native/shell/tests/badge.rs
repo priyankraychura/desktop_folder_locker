@@ -59,7 +59,8 @@ fn explorer_shows_the_badge_on_protected_items() {
         .ok()
         .unwrap();
 
-    // Windows loaded the overlay and its icon.
+    // Windows loaded the overlay: its icon's place among the system's
+    // icons.
     let icon = HSTRING::from(dll.with_file_name(BADGE_ICON).as_path());
     let badge = unsafe { SHGetIconOverlayIndexW(&icon, 0) };
     assert!(badge > 0, "the overlay isn't loaded ({badge})");
@@ -74,7 +75,8 @@ fn explorer_shows_the_badge_on_protected_items() {
     assert_eq!(overlay_of(&place.blocked), None);
 }
 
-/// The overlay that Explorer shows on [path], if any.
+/// The overlay icon that Explorer shows on [path], if any (its place among
+/// the system's icons, like `SHGetIconOverlayIndexW`).
 fn overlay_of(path: &Path) -> Option<i32> {
     let mut id: *mut ITEMIDLIST = std::ptr::null_mut();
     unsafe { SHParseDisplayName(&HSTRING::from(path), None::<&IBindCtx>, &mut id, 0, None) }
@@ -85,7 +87,7 @@ fn overlay_of(path: &Path) -> Option<i32> {
     // 0 (OI_DEFAULT) on the way in: answer now rather than later.
     let mut index = 0;
     let result = unsafe {
-        (Interface::vtable(&overlays).GetOverlayIndex)(overlays.as_raw(), child, &mut index)
+        (Interface::vtable(&overlays).GetOverlayIconIndex)(overlays.as_raw(), child, &mut index)
     };
     unsafe { CoTaskMemFree(Some(id.cast_const().cast())) };
     (result == S_OK).then_some(index)

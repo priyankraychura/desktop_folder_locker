@@ -263,7 +263,8 @@ native/                  the native parts, in Rust (Cargo workspace)
   drive/                 folder_locker_drive.exe: protocol, Dokany drive
   shell/                 folder_locker_shell.dll: the Explorer plug-in
   vendor/dokan/          Dokany bindings for Rust, with a fix
-installer/               Inno Setup script
+installer/               Inno Setup script, Dokany download, Windows 11
+                         menu package (sparse/)
 tool/                    icon generator
 docs/                    roadmap, architecture, screenshots
 ```

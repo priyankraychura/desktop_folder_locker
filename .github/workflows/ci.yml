@@ -140,6 +140,39 @@ jobs:
           & .\installer\get-dokany.ps1 -Destination "$release\dokany"
           Get-ChildItem -Recurse $release -File | Select-Object Length, FullName
 
+      # Phase 3e: the package that puts the plug-in's command on the first
+      # level of Windows 11's right-click menu. It ships once the app is
+      # signed (Phase 4). Until then it's built, signed with a throwaway
+      # certificate that only this machine trusts, installed next to the
+      # app, and checked: Windows makes the command through the package.
+      - name: Test the Windows 11 menu package
+        shell: pwsh
+        run: |
+          $release = Resolve-Path 'build\windows\x64\runner\Release'
+          $publisher = 'CN=Folder Locker Test'
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $publisher -CertStoreLocation Cert:\CurrentUser\My
+          $cer = Join-Path $env:RUNNER_TEMP 'test.cer'
+          $pfx = Join-Path $env:RUNNER_TEMP 'test.pfx'
+          $password = 'test'
+          Export-Certificate -Cert $cert -FilePath $cer | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (ConvertTo-SecureString $password -AsPlainText -Force) | Out-Null
+
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          $package = & .\installer\sparse\build-package.ps1 -Publisher $publisher -Version $version `
+            -Destination (Join-Path $env:RUNNER_TEMP 'sparse') -Certificate $pfx -Password $password
+          Add-AppxPackage -Path $package -ExternalLocation $release
+          $installed = Get-AppxPackage -Name FolderLocker.ExplorerMenu
+          if (-not $installed) { throw 'The package was not installed' }
+          $installed | Format-List Name, Version, Publisher, InstallLocation
+
+          # Found through the package, and made by the plug-in in Windows'
+          # host process, as for Explorer.
+          $command = [Activator]::CreateInstance([Type]::GetTypeFromCLSID('70A5D511-629B-4DF6-81E3-48CBA421BF7E'))
+          if ($null -eq $command) { throw 'Windows did not make the command' }
+          [Runtime.InteropServices.Marshal]::ReleaseComObject($command) | Out-Null
+          Remove-AppxPackage -Package $installed.PackageFullName
+
       - name: Build installer
         shell: pwsh
         run: |

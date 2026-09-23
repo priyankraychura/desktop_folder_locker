@@ -445,6 +445,16 @@ recovery key.
   build carries the Visual C++ runtime inside (`static_vcruntime`), so it
   doesn't depend on whichever `vcruntime140.dll` Explorer has loaded.
 
+  Windows 11's first menu level only shows commands from packages. The
+  Windows 11 menu package (`installer/sparse`) is a package with external
+  location: just a manifest and logos, pointing to the app's folder. It
+  declares the same command under its own class id
+  (`{70A5D511-629B-4DF6-81E3-48CBA421BF7E}`), which Windows runs in a
+  host process (`dllhost`). Windows installs it only if it trusts the
+  signature, so it ships with Phase 4's signing. Until then CI builds it,
+  signs it with a throwaway certificate, installs it next to the built app
+  and checks that Windows makes the command through it.
+
   Explorer keeps the DLL loaded for a while after it's used. A loaded DLL
   can't be replaced, but it can be renamed, so the installer moves it
   aside first (to `%TEMP%`, deleted at the next restart where Setup may do

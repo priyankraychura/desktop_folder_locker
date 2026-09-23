@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Windows 11 menu package: a package with external location ("sparse
+  package") that holds no files of its own, only this manifest and logos.
+  It points to the installed app, and declares the Explorer plug-in's
+  command for the first level of Windows 11's right-click menu, which only
+  takes commands from packages.
+
+  build-package.ps1 fills in the publisher (the subject of the certificate
+  that signs the package) and the version. Windows installs the package
+  only if it trusts that certificate.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap10 desktop4 desktop5 com rescap">
+  <Identity
+    Name="FolderLocker.ExplorerMenu"
+    Publisher="$PUBLISHER$"
+    Version="$VERSION$"
+    ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Folder Locker</DisplayName>
+    <PublisherDisplayName>Priyank Raychura</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+  <Applications>
+    <!-- The app as it is, outside the package: not listed in Start, and
+         started as usual. -->
+    <Application
+      Id="FolderLocker"
+      Executable="folder_locker.exe"
+      uap10:TrustLevel="mediumIL"
+      uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements
+        AppListEntry="none"
+        DisplayName="Folder Locker"
+        Description="Encrypt and hide your folders on Windows"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- CLSID_MENU_PACKAGED in native/shell/src/com.rs. -->
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="FolderLocker" Clsid="70A5D511-629B-4DF6-81E3-48CBA421BF7E" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="FolderLocker" Clsid="70A5D511-629B-4DF6-81E3-48CBA421BF7E" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+        <!-- Windows runs the plug-in for this menu in its own host process
+             (dllhost), not in Explorer. -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Folder Locker Explorer plug-in">
+              <com:Class Id="70A5D511-629B-4DF6-81E3-48CBA421BF7E" Path="folder_locker_shell.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

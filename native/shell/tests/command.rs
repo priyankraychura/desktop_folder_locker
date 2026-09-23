@@ -10,7 +10,7 @@ mod support;
 use std::ffi::c_void;
 
 use folder_locker_shell::{
-    DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU,
+    DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU, CLSID_MENU_PACKAGED,
 };
 use support::{selection, take_string, Place};
 use windows::core::{IUnknown, Interface, Result, GUID, HRESULT, HSTRING, PCWSTR};
@@ -122,6 +122,19 @@ fn the_entry_follows_each_item(place: &Place) {
         unsafe { command.GetToolTip(&items) }.unwrap_err().code(),
         E_NOTIMPL
     );
+
+    // Windows 11's first menu level makes the same command by its own id.
+    let packaged: IExplorerCommand = unsafe {
+        class_factory(&CLSID_MENU_PACKAGED)
+            .unwrap()
+            .CreateInstance(None::<&IUnknown>)
+    }
+    .unwrap();
+    assert_eq!(
+        entry(&packaged, &selection(&[&place.blocked])),
+        Some("Unlock with Folder Locker".to_owned())
+    );
+    drop(packaged);
 
     drop(command);
     assert_eq!(DllCanUnloadNow(), S_OK, "all released");

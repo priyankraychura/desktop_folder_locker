@@ -17,4 +17,6 @@ pub mod state;
 #[cfg(windows)]
 mod com;
 #[cfg(windows)]
-pub use com::{DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU};
+pub use com::{
+    DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU, CLSID_MENU_PACKAGED,
+};

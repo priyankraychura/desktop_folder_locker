@@ -214,7 +214,7 @@ opened.
 | 3b | Explorer plug-in | `folder_locker_shell.dll`, a user-mode COM server in Rust: no driver, no signature needed to run. Never blocks or crashes Explorer: it only reads the app's list of items and starts the app, and every entry point catches errors. The installer moves a copy that Explorer still has loaded aside, so updates need no restart | ✅ its COM objects tested on Windows in CI · 🧪 on a real PC |
 | 3c | Right-click menu that knows the item | One entry whose title and action follow the item: *Lock with Folder Locker* on new folders and files, *Unlock…* on blocked, read-only and hidden items, *Open…* on drive vaults, *Lock…* on unlocked items and on open drives (right-click `V:`); `.flk` vaults keep their file type's *Unlock…*. The app then does it without asking again. Registered per user, so no administrator rights. Top level on Windows 10; under *Show more options* on Windows 11 | ✅ end to end in CI: registered, shown by Windows' own menu code with the right titles, and run · 🧪 on a real PC |
 | 3d | Lock badge | A padlock overlay on items that stay in place while protected (Block access, Read-only, Hide only). Registered for all users by the installer (Windows reads overlays only there), shown to each user whose Explorer integration is on, and up to date as soon as the app changes an item. Windows shows at most 15 overlays, and cloud apps use many, so the name starts with a space to come early | ✅ end to end in CI: registered, loaded by Windows' overlay code, shown only on protected items · 🧪 on a real PC |
-| 3e | Windows 11 first-level menu | The same command in a package with external location (sparse package), which Windows 11 needs for its first menu level. Built and checked in CI with a test certificate; switched on in the installer with the free signing of Phase 4 | ⏳ |
+| 3e | Windows 11 first-level menu | The same command in a package with external location (sparse package, `installer/sparse`), which Windows 11 needs for its first menu level: just a manifest and logos that point to the app's folder. Windows runs the command from it in a host process. Windows installs such a package only if it trusts its signature, so it ships with the free signing of Phase 4; the classic menu keeps the per-user entry | ✅ built, signed with a throwaway certificate, installed and checked in CI · ⏳ ships with Phase 4 |
 
 **Changes from the first plan**
 
@@ -265,6 +265,9 @@ opened.
   it on every push.
 - Microsoft Store (free for individual developers; Microsoft signs MSIX).
 - SignPath Foundation code signing (free for open-source projects).
+- Sign the Windows 11 menu package (Phase 3e) too, and have the installer
+  install it next to the app (`Add-AppxPackage -ExternalLocation`, for
+  each user, like the Explorer entries) and remove it on uninstall.
 - Auto-update (WinSparkle through `auto_updater`) and a winget manifest.
 
 ---
