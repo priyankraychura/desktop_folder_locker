@@ -41,6 +41,8 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
   - the full UI flows.
 - **UI.** Every screen was rendered and reviewed in light and dark mode
   (`test/visual`).
+- **Build.** CI builds the release app and the installer on Windows for
+  every push.
 - **Windows-only behaviour** needs one manual pass on a real PC, using the
   checklist below:
   - registry entries, Explorer icons and double-click;

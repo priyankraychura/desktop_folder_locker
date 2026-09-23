@@ -12,7 +12,9 @@ abstract final class ShellActions {
     final isDirectory =
         FileSystemEntity.typeSync(path) == FileSystemEntityType.directory;
     if (Platform.isWindows) {
-      return _start('explorer.exe', isDirectory ? [path] : ['/select,$path']);
+      // `explorer /select, "C:\My Files\a.flk"`: the path must be its own
+      // (quoted) argument, or paths with spaces or commas break.
+      return _start('explorer.exe', isDirectory ? [path] : ['/select,', path]);
     }
     if (Platform.isMacOS) {
       return _start('open', isDirectory ? [path] : ['-R', path]);

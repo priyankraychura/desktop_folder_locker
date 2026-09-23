@@ -91,14 +91,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: folder-locker-setup
           path: build/installer/*.exe
           if-no-files-found: error
 
       - name: Upload app folder
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: folder-locker-windows-x64
           path: build/windows/x64/runner/Release/

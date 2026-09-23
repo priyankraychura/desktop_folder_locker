@@ -66,6 +66,11 @@ abstract final class FsUtils {
       FileSystemEntityType.directory;
 
   /// Renames a file or folder.
+  ///
+  /// On Windows, a virus scanner or the search indexer often keeps new
+  /// files open for a moment after they are written. "Access denied" and
+  /// "in use" errors are therefore retried for about three seconds before
+  /// giving up. This blocks, so only call it from background isolates.
   static void rename(String from, String to) {
     if (exists(to)) {
       throw EngineException(
@@ -74,18 +79,30 @@ abstract final class FsUtils {
         path: to,
       );
     }
-    guard(
-      () {
+    var delay = const Duration(milliseconds: 50);
+    for (var attempt = 1; ; attempt++) {
+      try {
         if (isDirectory(from)) {
           Directory(from).renameSync(to);
         } else {
           File(from).renameSync(to);
         }
-      },
-      path: from,
-      renaming: true,
-    );
+        return;
+      } on FileSystemException catch (e) {
+        if (attempt >= _renameAttempts || !_mayBeTransient(e)) {
+          throw mapError(e, path: from, renaming: true);
+        }
+        sleep(delay);
+        delay *= 2;
+      }
+    }
   }
+
+  static const int _renameAttempts = 7;
+
+  static bool _mayBeTransient(FileSystemException error) =>
+      Platform.isWindows &&
+      const {5, 32, 33}.contains(error.osError?.errorCode);
 
   /// Deletes a file or folder tree, clearing read-only flags first.
   ///
