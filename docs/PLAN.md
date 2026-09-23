@@ -98,15 +98,42 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 
 ---
 
-## Phase 1.1: quick protection modes ⏳
+## Phase 1.1: quick protection modes and unlocked items 🧪
 
-Protection without encryption, for very large folders.
+Protection without encryption, for very large folders, and help with items
+that are left unlocked.
 
-- **Deny access**: an NTFS "deny Everyone" rule. It first checks that the user
-  *owns* the folder, so the rule can always be removed again.
-- **Read-only**: deny write/delete, but allow reading.
-- System tray icon, reminders for unlocked items, optional auto re-lock.
-- Create a new recovery key (re-seals the recovery slot of every vault).
+| # | Milestone | What it contains | Status |
+|---|-----------|------------------|--------|
+| 1.1a | Block access and Read-only | An NTFS "deny Everyone" permission rule on the item, in place and instant. Only on items the user owns, on drives with permissions. Unlock removes exactly that rule. | ✅ rules tested on real NTFS in CI · 🧪 Explorer behaviour |
+| 1.1b | Notification-area icon | Native tray icon in the Windows runner: menu (open, lock all items, lock app, quit), amber icon while items are unlocked, keeps running when the window is closed | 🧪 |
+| 1.1c | Reminders and automatic re-locking | A notification when items stay unlocked; lock them again after N minutes; lock them when the app locks | ✅ |
+| 1.1d | New recovery key | Shown once and confirmed; every vault is re-sealed crash-safely; vaults that could not be reached are finished after the next unlock | ✅ |
+
+**Limits of Block access and Read-only**
+
+- They are not encryption. The rule can be removed, or the files read, by
+  the folder's owner (in Properties → Security), by an administrator, or
+  from another operating system. Use Encrypt for anything private.
+- Items inside the folder that have permission inheritance turned off
+  don't get the rule.
+- A blocked folder that is moved elsewhere shows as "Not found".
+
+**Manual test checklist for Phase 1.1 (Windows 10/11)**
+
+1. **Block access** on a folder → double-click it in Explorer → "Access
+   denied". **Unlock** in the app → it opens normally again.
+2. **Read-only** on a folder → files open, but saving, adding or deleting
+   fails. **Unlock** → it can be changed again.
+3. Right-click the blocked folder → **Lock with Folder Locker** → the app
+   offers to unlock it.
+4. Close the window → it disappears, and the icon stays next to the clock
+   (a one-time notification explains this). Unlock an item → the icon gets
+   the amber dot. Right-click the icon → **Lock all items**.
+5. Set **Remind me** to 15 minutes, unlock an item and close the window → a
+   notification appears after 15 minutes. Click it → the window opens.
+6. **Settings → Recovery key → New key…** → save the key → *Forgot
+   password?* on the lock screen accepts only the new key.
 
 ## Phase 2: open vaults as a virtual drive (Dokany) ⏳
 
@@ -151,3 +178,6 @@ Protection without encryption, for very large folders.
 | Riverpod | Testable dependency injection and state, no code generation |
 | Per-user install (Inno Setup, `PrivilegesRequired=lowest`) | No administrator prompt; Explorer integration lives in HKCU anyway |
 | Bundle the Visual C++ runtime DLLs | Flutter apps need them, and not every PC has the redistributable |
+| Block access with one "deny Everyone" permission rule, only on items the user owns | Instant even for huge folders; the owner can always remove it, so nobody is locked out for good |
+| Tray icon written in the runner (C++) instead of a plugin | About 250 lines, no extra dependency, and notifications work through the tray icon without registering the app |
+| New recovery key: save the key first, then re-seal vaults, and finish later if needed | The old key must stop working right away; each vault update is crash-safe on its own |

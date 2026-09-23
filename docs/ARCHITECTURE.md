@@ -195,6 +195,20 @@ plus slot 3.
   the stored public key. It then opens each vault through slot 3, and the
   vault gets a new slot 1 for the new password. The recovery secret is
   never stored.
+- **A new recovery key can be created at any time** (Settings). The flow:
+  1. The key is shown once, and the user confirms they saved it.
+  2. Its public key is saved in the keystore first, with an
+     `updatePending` flag. From then on only the new key resets the master
+     password.
+  3. `ResealOperation` replaces slot 3 of every vault the app can open
+     right now (master key, or a remembered item key). It only rewrites
+     the key-slot area, crash-safely (section 3.1).
+  4. Vaults it can't open keep the old slot for now: an item with its own
+     password that is locked, or a vault on a drive that isn't connected.
+     Items with their own password get the new key the next time they are
+     locked again (a new vault is written).
+  5. While the flag is set, every unlock of the app tries again and clears
+     it once all vaults are current.
 
 ## 5. Operations and crash safety
 
@@ -243,6 +257,43 @@ Any error before step 6 puts the original back.
 If recovery fails, the entry stays for the next start. The UI reports what
 was recovered.
 
+### 5.1 Block access and Read-only
+
+These methods leave the item in place and add one Windows permission entry
+(`platform/access_control.dart`, Win32 security API through FFI).
+
+- **The entry:** "deny Everyone", explicit, inherited by every file and
+  subfolder. Windows copies it to everything inside, so the call runs in a
+  background isolate.
+- **Block access** denies listing, reading, running, writing, creating and
+  deleting.
+- **Read-only** denies only writing, creating, deleting and changing
+  attributes.
+- **Never denied:** reading attributes and permissions, and changing
+  permissions. Explorer can still show the item, and its owner can always
+  remove the entry again.
+- **Only for items the user owns.** The owner must be the user, or a group
+  that is enabled in their token. The drive must support permissions (NTFS),
+  and the item must have a permission list at all.
+- **Removal is exact.** The app's own entry is recognised by its exact
+  mask, and nothing else is touched.
+- **The item is saved as locked before the entry is added.** If the app
+  stops halfway, "Unlock" still cleans up. A failed apply is rolled back,
+  and an item whose rollback also fails stays in the list so it can be
+  unlocked later.
+
+### 5.2 Items left unlocked
+
+- `UnlockedItemsWatcher` checks every 30 seconds:
+  - It locks items again after the chosen time, but only when that needs
+    no typed password. It never interrupts another operation. An item with
+    a file in use is retried after 5 minutes.
+  - It reports items that have been unlocked longer than the reminder time,
+    once per unlock.
+- `AppLocker` is the only way the app gets locked (sidebar, `Ctrl+L`, tray
+  menu, auto-lock). With "Lock them when the app locks" on, it locks
+  unlocked items first, while their keys are still in memory.
+
 ## 6. App data
 
 Everything lives in `%APPDATA%\FolderLocker`:
@@ -285,6 +336,18 @@ recovery key.
   A top-level entry needs a shell extension (Phase 3).
 - **Hide** sets the Hidden and System attributes (`SetFileAttributesW`
   through FFI). Explorer's default settings then hide the item.
+- **Block access / Read-only** use `GetNamedSecurityInfoW` and
+  `SetNamedSecurityInfoW` (section 5.1).
+- **Notification-area icon** (`windows/runner/tray_icon.cpp`). Dart drives
+  it over the `folder_locker/tray` method channel:
+  - `show` sets the tooltip, the "items unlocked" icon and the menu;
+  - `hide` removes the icon;
+  - `notify` shows a balloon, which Windows 10 and 11 turn into a normal
+    notification.
+
+  Clicks and menu choices come back as `activate` and `menuItem`. The icon
+  is added again when Explorer restarts (`TaskbarCreated`). With "Keep
+  running in the notification area" on, closing the window only hides it.
 - **Single instance.** The first copy holds an exclusive lock on
   `instance.lock` and watches `inbox/`. Later copies write their arguments
   there, call `AllowSetForegroundWindow` and exit.
@@ -313,6 +376,9 @@ recovery key. Any change to a vault is detected before its data is used.
   recoverable with forensic tools until they are overwritten. Phase 2
   (virtual drive) avoids writing plain files.
 - **Hide-only items.** Hiding is convenience, not security.
+- **Blocked and read-only items** against their owner, administrators or
+  another operating system. The permission entry stops other accounts and
+  accidents, but it isn't encryption.
 
 **Memory hygiene:**
 
@@ -330,8 +396,9 @@ independently audited**.
 | Folder | What it covers |
 |---|---|
 | `test/engine` | byte encoding, key slots, header A/B areas, archive paths, crypto; lock/unlock round trips with nested folders, Unicode names, chunk-boundary sizes and empty files; tamper and truncation detection; startup recovery of interrupted locks and unlocks; cancel; the isolate runner |
-| `test/features`, `test/core` | setup, unlock, change and reset of the master password; custom-password items; hide-only items; the path guard; launch arguments; JSON files with backup |
-| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove |
+| `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); reminders, automatic re-locking and locking items with the app; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
+| `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files (Windows only, run in CI) |
+| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove; the protect dialog's methods; the tray icon following the items and running its menu |
 | `test/visual` | renders every main screen to PNG (only when `SCREENSHOTS_DIR` is set) |
 
 The tests use cheap Argon2id settings (`KdfPolicy.fast`) and temporary

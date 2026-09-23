@@ -3,7 +3,7 @@
 ; Build the app first, then compile this script:
 ;
 ;   flutter build windows --release
-;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.0.0 installer\folder_locker.iss
+;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.1.0 installer\folder_locker.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml).
@@ -23,7 +23,7 @@
 #define VaultIconId "102"
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.1.0"
 #endif
 
 [Setup]

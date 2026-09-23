@@ -35,8 +35,10 @@ shown are temporary test folders.</sub>
 
 - **Encrypt** folders and files into a single `.flk` vault. It uses
   XChaCha20-Poly1305 and Argon2id, from [libsodium](https://libsodium.org).
-- **Hide** items from Explorer. You can hide alone (instant) or together with
-  encryption.
+- **Block access** or make items **Read-only**, instantly, even for huge
+  folders. The item stays in place, and a Windows permission rule stops
+  anyone from opening it (or from changing it).
+- **Hide** items from Explorer, alone or together with any other method.
 - **Master password** for everything, or **a password of its own** for any
   item.
 - **Recovery key**, shown once during setup. It resets the master password
@@ -46,6 +48,12 @@ shown are temporary test folders.</sub>
   - **double-click opens the password dialog**;
   - folders and files get **Lock with Folder Locker** in the right-click
     menu.
+- **Notification-area icon**: the app keeps running when you close the
+  window. The icon shows when items are unlocked, and its menu locks
+  everything in one click.
+- **Reminders and automatic re-locking** for items you leave unlocked. You
+  can also lock them automatically whenever the app locks.
+- **New recovery key** at any time. Every vault switches to it safely.
 - **Crash-safe**:
   - every new vault is decrypted and checked *before* the original is
     deleted;
@@ -62,13 +70,23 @@ shown are temporary test folders.</sub>
 
 1. On first start you create a master password and save your recovery key.
 2. Drag a folder into the app, or right-click it in Explorer and choose
-   **Lock with Folder Locker**. Then choose **Encrypt** and/or **Hide**.
-3. The folder becomes `Name.flk`, with a lock icon, in the same place. The
-   original files are deleted only after the vault has been verified.
+   **Lock with Folder Locker**. Then choose how to protect it:
+   - **Encrypt** (recommended),
+   - **Block access**,
+   - **Read-only**, or
+   - **Hide only**.
+
+   You can also hide it with any of these.
+3. With **Encrypt**, the folder becomes `Name.flk`, with a lock icon, in the
+   same place. The original files are deleted only after the vault has been
+   verified. With **Block access** or **Read-only**, it stays where it is
+   and Windows refuses to open it (or to change it).
 4. Double-click `Name.flk` to get the password dialog. The folder is
    restored and opened.
-5. Click **Lock** in the app to lock it again. When you close the app, it
-   offers to lock anything you left open.
+5. Click **Lock** in the app, or **Lock all items** in the menu of its icon
+   next to the clock, to lock it again. The app can remind you about
+   unlocked items, lock them again by itself, and offer to lock them when
+   you quit.
 
 ## Install
 
@@ -109,7 +127,7 @@ then:
 copy C:\Windows\System32\msvcp140.dll     build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140.dll   build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140_1.dll build\windows\x64\runner\Release
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.0.0 installer\folder_locker.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.1.0 installer\folder_locker.iss
 ```
 
 The installer is written to `build\installer`. CI runs all these steps on
@@ -135,7 +153,7 @@ SCREENSHOTS_DIR=docs/screenshots SCREENSHOTS_SCALE=1 flutter test test/visual
 
 ## Security notes and limitations
 
-**What it protects:** anything that is locked. A vault can't be read or
+**What it protects:** anything that is encrypted. A vault can't be read or
 changed without your password or recovery key, even if someone copies it or
 removes the disk. Any change to a vault is detected.
 
@@ -145,6 +163,10 @@ removes the disk. Any change to a vault is detected.
   recovery key, the data can't be recovered by anyone.
 - **Hide alone is not security.** Anyone who turns on "show hidden and
   system files" can see a hidden item. Use Encrypt for anything private.
+- **Block access and Read-only are not encryption either.** They stop
+  other people and accidents on this PC. But the folder's owner (in
+  Properties → Security) or an administrator can remove the rule, and
+  another operating system ignores it.
 - **While an item is unlocked**, its files are normal files on disk. Lock it
   again when you're done. After locking, the deleted originals can sometimes
   be recovered with forensic tools (less likely on SSDs). Phase 2 removes
@@ -196,7 +218,7 @@ widgets).
 | Phase | What | Status |
 |---|---|---|
 | 1 | Core app: encrypt, hide, Explorer basics, installer | Code complete, needs testing on a real Windows PC |
-| 1.1 | Quick protection modes (deny access, read-only), tray icon | Planned |
+| 1.1 | Block access, Read-only, tray icon, reminders, auto re-lock, new recovery key | Code complete, tray and Explorer behaviour need a real PC |
 | 2 | Open vaults as a virtual drive (Dokany), no plain files on disk | Planned |
 | 3 | Explorer plug-in: locked folders stay real folders | Planned |
 | 4 | Publishing: GitHub Releases, Microsoft Store, free code signing | Planned |

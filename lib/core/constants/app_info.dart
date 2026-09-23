@@ -1,7 +1,7 @@
 /// App-wide names and identifiers. Change the product name here only.
 abstract final class AppInfo {
   static const String name = 'Folder Locker';
-  static const String version = '1.0.0';
+  static const String version = '1.1.0';
   static const String tagline = 'Encrypt and hide your folders on Windows';
   static const String repositoryUrl =
       'https://github.com/priyankraychura/desktop_folder_locker';
