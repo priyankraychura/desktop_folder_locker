@@ -42,6 +42,23 @@ jobs:
       - name: Test
         run: flutter test
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Check Rust formatting
+        working-directory: native
+        run: cargo fmt --all --check
+
+      - name: Lint Rust
+        working-directory: native
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # The vault core, the helper's protocol, import and export.
+      - name: Test Rust
+        working-directory: native
+        run: cargo test --workspace
+
   windows:
     name: Test and build (Windows)
     runs-on: windows-latest
@@ -66,16 +83,29 @@ jobs:
       - name: Build app
         run: flutter build windows --release
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      # Also compiles Dokany's user-mode library from source, only to link
+      # against it; the helper uses the one Dokany installs.
+      - name: Lint and build the drive helper
+        working-directory: native
+        run: |
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo build --release -p folder-locker-drive
+
       # Flutter apps need the Visual C++ runtime. Shipping these three DLLs
       # next to the exe (as the Flutter docs suggest) means users don't have
       # to install the redistributable.
-      - name: Bundle the Visual C++ runtime
+      - name: Bundle the Visual C++ runtime and the drive helper
         shell: pwsh
         run: |
           $release = 'build\windows\x64\runner\Release'
           foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
             Copy-Item "$env:WINDIR\System32\$dll" $release
           }
+          Copy-Item native\target\release\folder_locker_drive.exe $release
           Get-ChildItem $release
 
       - name: Build installer
@@ -103,3 +133,40 @@ jobs:
           name: folder-locker-windows-x64
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
+
+  drive:
+    name: Drive end to end (Windows, Dokany)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      # The latest Dokany release, as users get it.
+      - name: Install Dokany
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'dokany'
+          gh release download --repo dokan-dev/dokany --pattern '*x64*.msi' --dir $dir
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $msi = (Get-ChildItem $dir -Filter *.msi | Select-Object -First 1).FullName
+          $log = Join-Path $env:RUNNER_TEMP 'dokany.log'
+          Write-Host "Installing $msi"
+          $process = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
+          if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
+            Get-Content $log -Tail 80
+            exit $process.ExitCode
+          }
+          Get-Item "$env:WINDIR\System32\dokan2.dll"
+
+      # Mounts a vault, uses the drive like any other, mounts it again.
+      - name: Test the drive helper
+        working-directory: native
+        env:
+          FLK_REQUIRE_DOKANY: '1'
+        run: cargo test --workspace -- --nocapture
