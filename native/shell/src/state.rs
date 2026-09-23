@@ -1,11 +1,14 @@
-//! What the app knows about the user's items, from its list
-//! (`%APPDATA%\FolderLocker\items.json`, written by
-//! `lib/features/items/data`). The app replaces the file in one step, so
-//! it's never read half-written.
+//! What the app knows about the user's items and settings, from its files
+//! in `%APPDATA%\FolderLocker`: `items.json` (written by
+//! `lib/features/items/data`) and `settings.json`. The app replaces each
+//! file in one step, so they're never read half-written.
 //!
-//! Explorer asks about many files quickly, so the list is read again only
-//! when the file changed, and checked for changes at most once a second.
+//! Explorer asks about every file it shows, so the files are read again
+//! only when they changed. On Windows a change notification on the folder
+//! says when; elsewhere (and as a safety net) the files are checked every
+//! second at most.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -47,21 +50,22 @@ impl Item {
         }
     }
 
-    fn role_of(&self, path: &str) -> Option<Role> {
-        if self.is_open_drive()
-            && self.mount_point.as_deref().map(normalize).as_deref() == Some(path)
-        {
-            return Some(Role::Drive);
+    /// Each path that belongs to the item, normalized, and how.
+    fn paths(&self) -> Vec<(String, Role)> {
+        let mut paths = Vec::new();
+        if let (true, Some(mount_point)) = (self.is_open_drive(), &self.mount_point) {
+            paths.push((normalize(mount_point), Role::Drive));
         }
         if let Some(vault) = self.vault_path.as_deref().map(normalize) {
-            if vault == path {
-                return Some(Role::Vault);
+            if self.method == Method::Drive {
+                paths.push((format!("{vault}\\vault.flk"), Role::VaultHeader));
             }
-            if self.method == Method::Drive && path == format!("{vault}\\vault.flk") {
-                return Some(Role::VaultHeader);
-            }
+            paths.push((vault, Role::Vault));
         }
-        (self.at_item_path() && normalize(&self.item_path) == path).then_some(Role::Item)
+        if self.at_item_path() {
+            paths.push((normalize(&self.item_path), Role::Item));
+        }
+        paths
     }
 }
 
@@ -81,6 +85,8 @@ pub enum Role {
 #[derive(Default, Debug)]
 pub struct Items {
     items: Vec<Item>,
+    /// Every path of every item, normalized: the item's index and role.
+    paths: HashMap<String, (usize, Role)>,
 }
 
 impl Items {
@@ -105,7 +111,7 @@ impl Items {
         let Ok(file) = serde_json::from_str::<File>(json) else {
             return Self::default();
         };
-        let items = file
+        let items: Vec<Item> = file
             .items
             .into_iter()
             .filter_map(|value| serde_json::from_value::<Stored>(value).ok())
@@ -127,15 +133,20 @@ impl Items {
                 })
             })
             .collect();
-        Self { items }
+        let mut paths = HashMap::new();
+        for (index, item) in items.iter().enumerate() {
+            for (path, role) in item.paths() {
+                // The first item wins if two claim a path.
+                paths.entry(path).or_insert((index, role));
+            }
+        }
+        Self { items, paths }
     }
 
     /// The item that [path] belongs to, and how.
     pub fn find(&self, path: &str) -> Option<(&Item, Role)> {
-        let path = normalize(path);
-        self.items
-            .iter()
-            .find_map(|item| item.role_of(&path).map(|role| (item, role)))
+        let (index, role) = self.paths.get(&normalize(path))?;
+        Some((&self.items[*index], *role))
     }
 
     pub fn len(&self) -> usize {
@@ -144,6 +155,30 @@ impl Items {
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
+    }
+}
+
+/// The app's settings that matter here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Settings {
+    /// "Explorer integration" in the app's settings.
+    pub explorer_integration: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            explorer_integration: true,
+        }
+    }
+}
+
+impl Settings {
+    pub fn parse(json: &str) -> Self {
+        let value: serde_json::Value = serde_json::from_str(json).unwrap_or_default();
+        Self {
+            explorer_integration: value["explorerIntegration"].as_bool().unwrap_or(true),
+        }
     }
 }
 
@@ -159,62 +194,173 @@ pub fn data_dir() -> Option<PathBuf> {
     std::env::var_os("APPDATA").map(|appdata| Path::new(&appdata).join("FolderLocker"))
 }
 
-/// The app's list, read again when it changes.
+/// The app's files, read again when they change.
 pub struct State {
-    file: Option<PathBuf>,
+    dir: Option<PathBuf>,
     cache: Mutex<Cache>,
 }
 
 #[derive(Default)]
 struct Cache {
     items: Arc<Items>,
-    /// When the file was last looked at.
+    settings: Settings,
+    /// When the files were last looked at.
     checked: Option<Instant>,
-    /// Its time and size then.
-    stamp: Option<(SystemTime, u64)>,
+    /// Their times and sizes then.
+    stamps: [Option<Stamp>; 2],
+    watch: Option<watch::Watch>,
 }
 
+type Stamp = (SystemTime, u64);
+
+/// Without a change notification, how long a look at the files holds.
 const RECHECK_AFTER: Duration = Duration::from_secs(1);
+/// With one, in case it missed something (the folder was replaced…).
+const RECHECK_WATCHED_AFTER: Duration = Duration::from_secs(10);
+
+const ITEMS_FILE: &str = "items.json";
+const SETTINGS_FILE: &str = "settings.json";
 
 impl State {
-    pub fn new(file: Option<PathBuf>) -> Self {
+    pub fn new(dir: Option<PathBuf>) -> Self {
         Self {
-            file,
+            dir,
             cache: Mutex::default(),
         }
     }
 
     /// For the current user.
     pub fn for_user() -> Self {
-        Self::new(data_dir().map(|dir| dir.join("items.json")))
+        Self::new(data_dir())
     }
 
     pub fn items(&self) -> Arc<Items> {
+        self.fresh(|cache| cache.items.clone())
+    }
+
+    pub fn settings(&self) -> Settings {
+        self.fresh(|cache| cache.settings)
+    }
+
+    /// Both at once.
+    pub fn now(&self) -> (Arc<Items>, Settings) {
+        self.fresh(|cache| (cache.items.clone(), cache.settings))
+    }
+
+    fn fresh<T>(&self, read: impl FnOnce(&Cache) -> T) -> T {
         let mut cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
         let now = Instant::now();
-        if cache
-            .checked
-            .is_some_and(|checked| now.duration_since(checked) < RECHECK_AFTER)
-        {
-            return cache.items.clone();
-        }
-        cache.checked = Some(now);
-        let Some(file) = &self.file else {
-            return cache.items.clone();
+        let (changed, holds_for) = match &cache.watch {
+            Some(watch) => (watch.changed(), RECHECK_WATCHED_AFTER),
+            None => (false, RECHECK_AFTER),
         };
-        let stamp = fs::metadata(file)
+        let current = cache
+            .checked
+            .is_some_and(|checked| now.duration_since(checked) < holds_for);
+        if changed || !current {
+            cache.checked = Some(now);
+            if let Some(dir) = &self.dir {
+                reload(&mut cache, dir);
+            }
+        }
+        read(&cache)
+    }
+}
+
+/// Reads the files that changed since the last look.
+fn reload(cache: &mut Cache, dir: &Path) {
+    // Watched from now on, before reading: a change while reading is seen
+    // next time. The folder may not exist until the app first runs.
+    if cache.watch.is_none() {
+        cache.watch = watch::Watch::new(dir);
+    }
+    let read = |name: &str, stamp: &mut Option<Stamp>| -> Option<Option<String>> {
+        let file = dir.join(name);
+        let now = fs::metadata(&file)
             .ok()
             .and_then(|metadata| Some((metadata.modified().ok()?, metadata.len())));
-        if stamp.is_some() && stamp == cache.stamp {
-            return cache.items.clone();
+        if now.is_some() && now == *stamp {
+            return None;
         }
-        cache.stamp = stamp;
-        cache.items = Arc::new(
-            fs::read_to_string(file)
-                .map(|json| Items::parse(&json))
-                .unwrap_or_default(),
-        );
-        cache.items.clone()
+        *stamp = now;
+        Some(fs::read_to_string(file).ok())
+    };
+    let [items_stamp, settings_stamp] = &mut cache.stamps;
+    if let Some(json) = read(ITEMS_FILE, items_stamp) {
+        cache.items = Arc::new(json.map(|json| Items::parse(&json)).unwrap_or_default());
+    }
+    if let Some(json) = read(SETTINGS_FILE, settings_stamp) {
+        cache.settings = json.map(|json| Settings::parse(&json)).unwrap_or_default();
+    }
+}
+
+/// A change notification on the app's folder (Windows).
+#[cfg(windows)]
+mod watch {
+    use std::path::Path;
+
+    use windows::core::HSTRING;
+    use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
+    use windows::Win32::Storage::FileSystem::{
+        FindCloseChangeNotification, FindFirstChangeNotificationW, FindNextChangeNotification,
+        FILE_NOTIFY_CHANGE_FILE_NAME, FILE_NOTIFY_CHANGE_LAST_WRITE, FILE_NOTIFY_CHANGE_SIZE,
+    };
+    use windows::Win32::System::Threading::WaitForSingleObject;
+
+    pub struct Watch(HANDLE);
+
+    // The handle is only waited on and re-armed, under the cache's lock.
+    unsafe impl Send for Watch {}
+
+    impl Watch {
+        pub fn new(dir: &Path) -> Option<Self> {
+            let handle = unsafe {
+                FindFirstChangeNotificationW(
+                    &HSTRING::from(dir),
+                    false,
+                    FILE_NOTIFY_CHANGE_FILE_NAME
+                        | FILE_NOTIFY_CHANGE_LAST_WRITE
+                        | FILE_NOTIFY_CHANGE_SIZE,
+                )
+            }
+            .ok()?;
+            Some(Self(handle))
+        }
+
+        /// Whether something in the folder changed since the last call. It
+        /// is armed again before the caller reads the files, so a change
+        /// while they read is reported next time.
+        pub fn changed(&self) -> bool {
+            if unsafe { WaitForSingleObject(self.0, 0) } != WAIT_OBJECT_0 {
+                return false;
+            }
+            let _ = unsafe { FindNextChangeNotification(self.0) };
+            true
+        }
+    }
+
+    impl Drop for Watch {
+        fn drop(&mut self) {
+            let _ = unsafe { FindCloseChangeNotification(self.0) };
+        }
+    }
+}
+
+/// Elsewhere the files are only checked from time to time.
+#[cfg(not(windows))]
+mod watch {
+    use std::path::Path;
+
+    pub struct Watch;
+
+    impl Watch {
+        pub fn new(_dir: &Path) -> Option<Self> {
+            None
+        }
+
+        pub fn changed(&self) -> bool {
+            false
+        }
     }
 }
 
@@ -267,19 +413,51 @@ mod tests {
     }
 
     #[test]
-    fn rereads_the_list_when_it_changes() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("items.json");
-        let state = State::new(Some(file.clone()));
-        assert!(state.items().is_empty(), "no list yet");
+    fn reads_the_settings() {
+        assert!(Settings::parse(r#"{"themeMode": "dark"}"#).explorer_integration);
+        assert!(!Settings::parse(r#"{"explorerIntegration": false}"#).explorer_integration);
+        assert!(Settings::parse("not json").explorer_integration);
+    }
 
-        fs::write(&file, LIST).unwrap();
-        // Checked again only after a moment.
+    #[test]
+    fn rereads_the_files_when_they_change() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = State::new(Some(dir.path().to_owned()));
+        assert!(state.items().is_empty(), "no list yet");
+        assert!(state.settings().explorer_integration);
+
+        fs::write(dir.path().join(ITEMS_FILE), LIST).unwrap();
+        fs::write(
+            dir.path().join(SETTINGS_FILE),
+            r#"{"explorerIntegration": false}"#,
+        )
+        .unwrap();
+        // Seen at once where Windows reports the change, or else after a
+        // moment.
         state.cache.lock().unwrap().checked = None;
         assert_eq!(state.items().len(), 3);
+        assert!(!state.settings().explorer_integration);
 
-        fs::write(&file, r#"{"items": []}"#).unwrap();
+        fs::write(dir.path().join(ITEMS_FILE), r#"{"items": []}"#).unwrap();
         state.cache.lock().unwrap().checked = None;
         assert!(state.items().is_empty());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn sees_changes_at_once_on_windows() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = State::new(Some(dir.path().to_owned()));
+        assert!(state.items().is_empty());
+        assert!(state.cache.lock().unwrap().watch.is_some());
+
+        // Long before the next look at the files: the change notification
+        // tells right away.
+        fs::write(dir.path().join(ITEMS_FILE), LIST).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while state.items().is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(state.items().len(), 3);
     }
 }

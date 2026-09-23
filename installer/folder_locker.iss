@@ -34,6 +34,10 @@
 ; native\shell\src\com.rs). In sections, "{{" stands for "{".
 #define ShellDll "folder_locker_shell.dll"
 #define ShellClsid "{{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}"
+; The plug-in's lock badge (CLSID_BADGE). Windows uses the first 15 icon
+; overlays by name, so its name starts with a space.
+#define BadgeClsid "{{38F771FD-E77E-4105-A560-9E02A7B507D5}"
+#define BadgeName " FolderLocker"
 
 #if FileExists(AddBackslash(SourcePath) + BuildDir + "\" + DokanyMsi)
   #define BundleDokany
@@ -127,6 +131,14 @@ Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}\InprocServer32"; Value
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: "ExplorerCommandHandler"; ValueData: "{#ShellClsid}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}"; ValueType: string; ValueName: "ExplorerCommandHandler"; ValueData: "{#ShellClsid}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Drive\shell\{#LockVerb}"; ValueType: string; ValueName: "ExplorerCommandHandler"; ValueData: "{#ShellClsid}"; Flags: uninsdeletekey
+; The lock badge on blocked, read-only and hidden items: an icon overlay,
+; which Windows only takes from the machine's settings, so only when
+; installing for all users. Explorer loads it when it starts. The plug-in
+; shows it to each user whose Explorer integration setting is on.
+Root: HKLM; Subkey: "Software\Classes\CLSID\{#BadgeClsid}"; ValueType: string; ValueName: ""; ValueData: "{#AppName} lock badge"; Flags: uninsdeletekey; Check: IsAdminInstallMode
+Root: HKLM; Subkey: "Software\Classes\CLSID\{#BadgeClsid}\InprocServer32"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ShellDll}"; Check: IsAdminInstallMode
+Root: HKLM; Subkey: "Software\Classes\CLSID\{#BadgeClsid}\InprocServer32"; ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"; Check: IsAdminInstallMode
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\{#BadgeName}"; ValueType: string; ValueName: ""; ValueData: "{#BadgeClsid}"; Flags: uninsdeletekey; Check: IsAdminInstallMode
 #else
 ; "Lock with Folder Locker" on folders and files.
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: ""; ValueData: "Lock with {#AppName}"; Flags: uninsdeletekey
@@ -232,9 +244,10 @@ end;
 { Explorer keeps the plug-in loaded while it's in use, and a loaded DLL
   can't be replaced or deleted. It can be renamed, though: Explorer goes on
   with the old copy until it restarts, and loads the new one next time. The
-  old copy goes to the temporary folder (or stays next to the app, see
-  [InstallDelete]), and is deleted when Windows restarts where Setup may
-  do that. So neither updating nor uninstalling needs a restart. }
+  old copy goes to the temporary folder, or stays next to the app until the
+  next update (see the InstallDelete section). Where Setup may, Windows
+  deletes it when it restarts. So neither updating nor uninstalling needs a
+  restart. }
 procedure MovePluginAway;
 var
   Dll, Stamp, Old: String;

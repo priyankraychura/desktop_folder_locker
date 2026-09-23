@@ -11,17 +11,14 @@
 mod support;
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use folder_locker_shell::CLSID_MENU;
-use support::Place;
+use support::{built_dll, remove_key, set, Place};
 use windows::core::{HSTRING, PCSTR};
-use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::System::Com::{CoInitializeEx, IBindCtx, COINIT_APARTMENTTHREADED};
-use windows::Win32::System::Registry::{
-    RegDeleteTreeW, RegSetKeyValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, REG_SZ,
-};
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
 use windows::Win32::UI::Shell::{
     BHID_SFUIObject, IContextMenu, IShellItem, IsUserAnAdmin, SHCreateItemFromParsingName,
     CMF_NORMAL, CMINVOKECOMMANDINFO, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC,
@@ -93,20 +90,6 @@ fn explorer_shows_and_runs_the_entry() {
     Menu::of(Path::new(&format!("{system}\\"))).no_entry();
 }
 
-/// `folder_locker_shell.dll`, built along with this test.
-fn built_dll() -> PathBuf {
-    let deps = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_owned();
-    [deps.parent().unwrap(), deps.as_path()]
-        .iter()
-        .map(|dir| dir.join("folder_locker_shell.dll"))
-        .find(|dll| dll.exists())
-        .expect("folder_locker_shell.dll is built")
-}
-
 /// The plug-in's registry entries, as the app writes them for the current
 /// user. Removed again when dropped.
 struct Registration {
@@ -147,7 +130,7 @@ impl Registration {
             keys.push((HKEY_CURRENT_USER, verb));
         }
         for (root, key) in keys {
-            let _ = unsafe { RegDeleteTreeW(root, &HSTRING::from(key.as_str())) };
+            remove_key(root, &key);
         }
     }
 }
@@ -156,21 +139,6 @@ impl Drop for Registration {
     fn drop(&mut self) {
         Self::remove(self.machine);
     }
-}
-
-fn set(root: HKEY, key: &str, name: &str, value: &str) {
-    let data: Vec<u16> = value.encode_utf16().chain(Some(0)).collect();
-    let result = unsafe {
-        RegSetKeyValueW(
-            root,
-            &HSTRING::from(key),
-            &HSTRING::from(name),
-            REG_SZ.0,
-            Some(data.as_ptr().cast()),
-            (data.len() * 2) as u32,
-        )
-    };
-    assert_eq!(result, ERROR_SUCCESS, "writing {key}");
 }
 
 /// The right-click menu that Windows builds for an item, as Explorer

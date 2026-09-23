@@ -1,18 +1,19 @@
-//! The COM server that Explorer loads: the class factory and the
-//! right-click command.
+//! The COM server that Explorer loads: the class factory, the right-click
+//! command and the lock badge.
 //!
 //! Explorer calls in on its own threads, so every entry point turns
 //! errors and panics into an error code: a problem here must never take
 //! Explorer down.
 
 use std::ffi::c_void;
+use std::os::windows::ffi::OsStrExt;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicIsize, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 use windows::core::{
-    implement, Error, IUnknown, Interface, Ref, Result, BOOL, GUID, HRESULT, HSTRING, PWSTR,
+    implement, Error, IUnknown, Interface, Ref, Result, BOOL, GUID, HRESULT, HSTRING, PCWSTR, PWSTR,
 };
 use windows::Win32::Foundation::{
     CloseHandle, CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_FAIL, E_NOTIMPL,
@@ -27,15 +28,22 @@ use windows::Win32::System::Threading::{
     CreateProcessW, CREATE_DEFAULT_ERROR_MODE, PROCESS_INFORMATION, STARTUPINFOW,
 };
 use windows::Win32::UI::Shell::{
-    IEnumExplorerCommand, IExplorerCommand, IExplorerCommand_Impl, IShellItemArray, ECF_DEFAULT,
-    ECS_ENABLED, ECS_HIDDEN, SIGDN_FILESYSPATH,
+    IEnumExplorerCommand, IExplorerCommand, IExplorerCommand_Impl, IShellIconOverlayIdentifier,
+    IShellIconOverlayIdentifier_Impl, IShellItemArray, ECF_DEFAULT, ECS_ENABLED, ECS_HIDDEN,
+    ISIOI_ICONFILE, ISIOI_ICONINDEX, SIGDN_FILESYSPATH,
 };
 
+use crate::badge::has_badge;
 use crate::menu::{command_for, Command};
 use crate::state::State;
 
 /// The right-click command, `{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}`.
 pub const CLSID_MENU: GUID = GUID::from_u128(0x3c1c048e_1c62_4b0b_87ac_55edad0e97bb);
+/// The lock badge, `{38F771FD-E77E-4105-A560-9E02A7B507D5}`.
+pub const CLSID_BADGE: GUID = GUID::from_u128(0x38f771fd_e77e_4105_a560_9e02a7b507d5);
+
+/// The badge's icon, next to this DLL.
+pub const BADGE_ICON: &str = "lock_badge.ico";
 
 /// This DLL, to find the app next to it.
 static MODULE: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
@@ -73,7 +81,7 @@ pub unsafe extern "system" fn DllGetClassObject(
         }
         unsafe { *object = std::ptr::null_mut() };
         let clsid = unsafe { *clsid };
-        if clsid != CLSID_MENU {
+        if clsid != CLSID_MENU && clsid != CLSID_BADGE {
             return CLASS_E_CLASSNOTAVAILABLE;
         }
         let factory: IClassFactory = Factory {
@@ -137,11 +145,12 @@ impl IClassFactory_Impl for Factory_Impl {
             if !outer.is_null() {
                 return Err(CLASS_E_NOAGGREGATION.into());
             }
-            if self.clsid != CLSID_MENU {
-                return Err(CLASS_E_CLASSNOTAVAILABLE.into());
-            }
-            let command: IUnknown = MenuCommand { _live: Live::new() }.into();
-            unsafe { command.query(iid, object).ok() }
+            let created: IUnknown = match self.clsid {
+                CLSID_MENU => MenuCommand { _live: Live::new() }.into(),
+                CLSID_BADGE => Badge { _live: Live::new() }.into(),
+                _ => return Err(CLASS_E_CLASSNOTAVAILABLE.into()),
+            };
+            unsafe { created.query(iid, object).ok() }
         })
     }
 
@@ -207,6 +216,61 @@ impl IExplorerCommand_Impl for MenuCommand_Impl {
     }
 }
 
+/// The lock badge (see [`crate::badge`]). Explorer asks about every file
+/// it shows, so this has to be quick: the answer comes from memory.
+#[implement(IShellIconOverlayIdentifier)]
+pub struct Badge {
+    _live: Live,
+}
+
+impl IShellIconOverlayIdentifier_Impl for Badge_Impl {
+    fn IsMemberOf(&self, path: &PCWSTR, _attributes: u32) -> Result<()> {
+        guard(|| {
+            let no = || Error::from_hresult(S_FALSE);
+            if path.is_null() {
+                return Err(no());
+            }
+            let path = unsafe { path.to_string() }.map_err(|_| no())?;
+            let (items, settings) = state().now();
+            if has_badge(&path, &items, settings) {
+                Ok(())
+            } else {
+                Err(no())
+            }
+        })
+    }
+
+    fn GetOverlayInfo(
+        &self,
+        file: PWSTR,
+        capacity: i32,
+        index: *mut i32,
+        flags: *mut u32,
+    ) -> Result<()> {
+        guard(|| {
+            if file.is_null() || index.is_null() || flags.is_null() {
+                return Err(E_POINTER.into());
+            }
+            let icon = module_path()?.with_file_name(BADGE_ICON);
+            let icon: Vec<u16> = icon.as_os_str().encode_wide().chain(Some(0)).collect();
+            if icon.len() > usize::try_from(capacity).unwrap_or(0) {
+                return Err(E_FAIL.into());
+            }
+            unsafe {
+                std::ptr::copy_nonoverlapping(icon.as_ptr(), file.0, icon.len());
+                *index = 0;
+                *flags = ISIOI_ICONFILE | ISIOI_ICONINDEX;
+            }
+            Ok(())
+        })
+    }
+
+    /// The highest: on a protected item, being locked matters most.
+    fn GetPriority(&self) -> Result<i32> {
+        Ok(0)
+    }
+}
+
 /// The entry for the selection: only single file system items get one.
 fn selected_command(items: Ref<IShellItemArray>) -> Result<Option<Command>> {
     let Some(items) = items.as_ref() else {
@@ -258,14 +322,18 @@ fn start_app(command: &Command) -> Result<()> {
 
 /// `folder_locker.exe` next to this DLL.
 fn app_path() -> Result<PathBuf> {
+    Ok(module_path()?.with_file_name("folder_locker.exe"))
+}
+
+/// This DLL's own path.
+fn module_path() -> Result<PathBuf> {
     let module = HMODULE(MODULE.load(Ordering::Relaxed));
     let mut buffer = vec![0u16; 32_768];
     let length = unsafe { GetModuleFileNameW(Some(module), &mut buffer) } as usize;
     if length == 0 || length >= buffer.len() {
         return Err(E_FAIL.into());
     }
-    let dll = PathBuf::from(String::from_utf16_lossy(&buffer[..length]));
-    Ok(dll.with_file_name("folder_locker.exe"))
+    Ok(PathBuf::from(String::from_utf16_lossy(&buffer[..length])))
 }
 
 /// A copy of [text] that COM frees (`CoTaskMemFree`).

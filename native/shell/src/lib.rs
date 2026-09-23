@@ -6,10 +6,15 @@
 //! point catches errors and panics, so a problem here can't take Explorer
 //! down.
 
+// The linker asks for the COM exports to be PRIVATE, which only concerns
+// the import library that comes with the DLL. Nothing uses it.
+#![allow(linker_messages)]
+
+pub mod badge;
 pub mod menu;
 pub mod state;
 
 #[cfg(windows)]
 mod com;
 #[cfg(windows)]
-pub use com::{DllCanUnloadNow, DllGetClassObject, CLSID_MENU};
+pub use com::{DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU};

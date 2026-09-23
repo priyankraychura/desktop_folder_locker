@@ -8,6 +8,9 @@ Writes:
   windows/runner/resources/tray_attention.ico
                                            notification-area icon while items
                                            are unlocked (app icon + amber dot)
+  windows/runner/resources/lock_badge.ico  Explorer's lock badge on blocked
+                                           and read-only items (an overlay,
+                                           next to the Explorer plug-in)
   assets/icons/app_icon.png                512 px previews (README)
   assets/icons/vault_icon.png
 
@@ -129,6 +132,35 @@ def tray_attention_icon():
     return icon
 
 
+def lock_badge(size):
+    """Explorer's lock badge for one icon size: a padlock in the bottom-left
+    corner, drawn over the item's own icon. Relatively bigger on small icons,
+    so it stays readable at 16 px without covering large ones."""
+    scale = 8
+    big = size * scale
+    share = 0.56 if size <= 16 else 0.46 if size <= 32 else 0.40 if size <= 48 else 0.30
+    d = big * share
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    ring = d * 0.09
+    draw.ellipse((0, big - d, d, big), fill=WHITE)
+    draw.ellipse((ring, big - d + ring, d - ring, big - ring), fill=DEEP + (255,))
+    inner = d - 2 * ring
+    draw_padlock(draw, d / 2, big - d / 2 - inner * 0.3, inner * 0.5, WHITE, DEEP + (255,))
+    return image.resize((size, size), Image.LANCZOS)
+
+
+def save_frames(frames, path):
+    """An .ico with one frame drawn for each size."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames[-1].save(
+        path,
+        format="ICO",
+        sizes=[frame.size for frame in frames],
+        append_images=frames[:-1],
+    )
+
+
 def save_ico(image, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     frames = [image.resize((s, s), Image.LANCZOS) for s in SIZES]
@@ -141,6 +173,7 @@ def main():
     save_ico(app, resources / "app_icon.ico")
     save_ico(vault_icon(), resources / "vault_icon.ico")
     save_ico(tray_attention_icon(), resources / "tray_attention.ico")
+    save_frames([lock_badge(s) for s in SIZES], resources / "lock_badge.ico")
     preview = ROOT / "assets" / "icons" / "app_icon.png"
     preview.parent.mkdir(parents=True, exist_ok=True)
     app.resize((512, 512), Image.LANCZOS).save(preview)

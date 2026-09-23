@@ -39,11 +39,17 @@ jobs:
         run: flutter analyze
 
       # Inno Setup's preprocessor takes any line that starts with "#" as a
-      # directive, so a Pascal "#13#10" must never start a line.
+      # directive, so a Pascal "#13#10" must never start a line. And Inno
+      # Setup takes any line that starts with "[" as a section, even in a
+      # comment in [Code].
       - name: Check the installer script
         run: |
-          if grep -nE '^\s*#[0-9$]' installer/*.iss; then
+          if grep -HnE '^\s*#[0-9$]' installer/*.iss; then
             echo "A line in the installer script starts with a character code"
+            exit 1
+          fi
+          if grep -HnE '^\s*\[' installer/*.iss | grep -vE '^[^:]+:[0-9]+:\[[A-Za-z]+\]\s*$'; then
+            echo "A line in the installer script starts with [ but is no section"
             exit 1
           fi
 
@@ -160,7 +166,7 @@ jobs:
             throw "Setup failed with $($process.ExitCode)"
           }
           $app = Join-Path $env:ProgramFiles 'Folder Locker'
-          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'folder_locker_shell.dll', 'dokany\Dokan_x64.msi') {
+          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'folder_locker_shell.dll', 'lock_badge.ico', 'dokany\Dokan_x64.msi') {
             if (-not (Test-Path (Join-Path $app $file))) { throw "$file was not installed" }
           }
           if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {
@@ -182,6 +188,13 @@ jobs:
           }
           $open = (Get-ItemProperty "$classes\FolderLocker.Vault\shell\open\command").'(default)'
           if ($open -notlike "*$app*") { throw "Unexpected vault command: $open" }
+          # The lock badge, for all users (native/shell/tests/badge.rs tests
+          # it in Explorer's overlay code).
+          $badge = '{38F771FD-E77E-4105-A560-9E02A7B507D5}'
+          $overlay = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ FolderLocker'
+          if ((Get-ItemProperty -LiteralPath $overlay).'(default)' -ne $badge) { throw 'The lock badge is not registered' }
+          $server = (Get-ItemProperty "HKLM:\Software\Classes\CLSID\$badge\InprocServer32").'(default)'
+          if ($server -ne (Join-Path $app 'folder_locker_shell.dll')) { throw "Unexpected badge: $server" }
 
           # The installed helper finds the Dokany that Setup installed.
           $start = [System.Diagnostics.ProcessStartInfo]::new((Join-Path $app 'folder_locker_drive.exe'))
@@ -208,6 +221,9 @@ jobs:
           if (Test-Path (Join-Path $app 'folder_locker.exe')) { throw 'The app was not removed' }
           foreach ($key in 'Directory\shell\FolderLocker.Lock', 'Drive\shell\FolderLocker.Lock', "CLSID\$clsid", 'FolderLocker.Vault') {
             if (Test-Path -LiteralPath "$classes\$key") { throw "$key was not removed" }
+          }
+          foreach ($key in $overlay, "HKLM:\Software\Classes\CLSID\$badge") {
+            if (Test-Path -LiteralPath $key) { throw "$key was not removed" }
           }
           if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {
             throw 'Dokany should stay installed'

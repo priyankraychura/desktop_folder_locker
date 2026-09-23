@@ -399,6 +399,14 @@ recovery key.
   | `CLSID\{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}\InprocServer32` | `<app folder>\folder_locker_shell.dll`, `ThreadingModel` = `Apartment` |
   | `Directory`, `*` and `Drive` `\shell\FolderLocker.Lock` | `ExplorerCommandHandler` = the class id above |
 
+  Installed for all users, the installer also registers the lock badge for
+  the machine (`HKLM`), where Windows reads icon overlays:
+
+  | Key (under `HKLM\Software`) | Value |
+  |---|---|
+  | `Classes\CLSID\{38F771FD-E77E-4105-A560-9E02A7B507D5}\InprocServer32` | `<app folder>\folder_locker_shell.dll`, `ThreadingModel` = `Apartment` |
+  | `Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ FolderLocker` | the class id above |
+
   Without `folder_locker_shell.dll` next to the app (a development build
   without it), folders and files get the plain `FolderLocker.Lock` entry
   instead: "Lock with Folder Locker", `"<exe>" --lock "%1"`.
@@ -406,8 +414,9 @@ recovery key.
   On Windows 11 the entry appears under **Show more options**; the first
   menu level needs a signed package (Phase 3e).
 - **Explorer plug-in** (`native/shell`, `folder_locker_shell.dll`). A
-  small in-process COM server in Rust that implements `IExplorerCommand`,
-  so Explorer asks it for the entry's title and state, and runs it:
+  small in-process COM server in Rust with two classes. The right-click
+  entry implements `IExplorerCommand`, so Explorer asks it for the entry's
+  title and state, and runs it:
 
   | The item | The entry | The app gets |
   |---|---|---|
@@ -418,9 +427,18 @@ recovery key.
   | An open drive (`V:`) or its vault folder | Lock with Folder Locker | `--lock <item>` |
   | A `.flk` file, a whole drive, anything inside a `.flkd` folder or the Recycle Bin, several items | none (`.flk` files have the file type's own "Unlock with…") | |
 
-  It reads `%APPDATA%\FolderLocker\items.json` (which the app replaces in
-  one step), again only when the file changed, and checks at most once a
-  second. Everything else is the app's job: the plug-in only starts
+  The lock badge implements `IShellIconOverlayIdentifier`: a padlock
+  (`lock_badge.ico`, next to the DLL) on blocked, read-only and hidden
+  items while they're protected, if the user's Explorer integration
+  setting is on. Explorer asks it about every file it shows, so it answers
+  from memory. Windows uses only the first 15 overlays by name (cloud apps
+  register many, with leading spaces), so its name starts with a space.
+
+  Both read `%APPDATA%\FolderLocker\items.json` and `settings.json`
+  (which the app replaces in one step), again only when they changed. A
+  change notification on that folder says when, so a badge changes as
+  soon as the app tells Explorer an item changed. Everything else is the
+  app's job: the plug-in only starts
   `folder_locker.exe` from its own folder, passing none of Explorer's
   handles. Every entry point catches errors and panics and returns an
   error code, so a problem in it can't take Explorer down. The release
@@ -506,7 +524,7 @@ independently audited**.
 | `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); drive items (with a fake helper): lock, open, close, drives in use, decrypt to a folder, restarts; reminders, automatic re-locking and locking items with the app; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
 | `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files; the Explorer entries with and without the plug-in, written under a test key (Windows only, run in CI) |
 | `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove, and a drive's open, close and decrypt; the protect dialog's methods and "Open it as"; the Dokany row in Settings; the tray icon following the items and running its menu; Explorer's unlock and lock requests, and requests waiting for the app to be unlocked |
-| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)). The plug-in's choice of entry for each kind of item; on Windows, its COM objects as Explorer uses them, and end to end: registered, shown by Windows' own menu code (shell32) with the right title, and run |
+| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)). The plug-in's choice of entry and badge for each kind of item; on Windows, its COM objects as Explorer uses them, and end to end: the entry registered, shown by Windows' own menu code (shell32) with the right title, and run; the badge registered, loaded by Windows' overlay code and shown only on protected items |
 | `test/visual` | renders every main screen to PNG (only when `SCREENSHOTS_DIR` is set) |
 
 The tests use cheap Argon2id settings (`KdfPolicy.fast`) and temporary

@@ -213,7 +213,7 @@ opened.
 | 3a | Locked drive vault folders | A `Name.flkd` folder shows the vault icon and a tooltip, and inside it only `vault.flk` (the encrypted data is hidden), so opening the folder leads straight to the password dialog. Plain `desktop.ini`: no plug-in or administrator rights needed, and it travels with the vault to other PCs | ✅ checked in the drive test on Windows (attributes, and the shell finds the icon) · 🧪 on a real PC |
 | 3b | Explorer plug-in | `folder_locker_shell.dll`, a user-mode COM server in Rust: no driver, no signature needed to run. Never blocks or crashes Explorer: it only reads the app's list of items and starts the app, and every entry point catches errors. The installer moves a copy that Explorer still has loaded aside, so updates need no restart | ✅ its COM objects tested on Windows in CI · 🧪 on a real PC |
 | 3c | Right-click menu that knows the item | One entry whose title and action follow the item: *Lock with Folder Locker* on new folders and files, *Unlock…* on blocked, read-only and hidden items, *Open…* on drive vaults, *Lock…* on unlocked items and on open drives (right-click `V:`); `.flk` vaults keep their file type's *Unlock…*. The app then does it without asking again. Registered per user, so no administrator rights. Top level on Windows 10; under *Show more options* on Windows 11 | ✅ end to end in CI: registered, shown by Windows' own menu code with the right titles, and run · 🧪 on a real PC |
-| 3d | Lock badge | A padlock overlay on items that stay in place while protected (Block access, Read-only). Registered for all users (installer); Windows shows at most 15 overlays, and cloud apps use many | ⏳ |
+| 3d | Lock badge | A padlock overlay on items that stay in place while protected (Block access, Read-only, Hide only). Registered for all users by the installer (Windows reads overlays only there), shown to each user whose Explorer integration is on, and up to date as soon as the app changes an item. Windows shows at most 15 overlays, and cloud apps use many, so the name starts with a space to come early | ✅ end to end in CI: registered, loaded by Windows' overlay code, shown only on protected items · 🧪 on a real PC |
 | 3e | Windows 11 first-level menu | The same command in a package with external location (sparse package), which Windows 11 needs for its first menu level. Built and checked in CI with a test certificate; switched on in the installer with the free signing of Phase 4 | ⏳ |
 
 **Changes from the first plan**
@@ -249,11 +249,14 @@ opened.
 7. Right-click `C:`, a `.flk` file (it has the file type's own **Unlock
    with…**), or several items at once → no Folder Locker entry from the
    plug-in.
-8. Update Folder Locker while Explorer has used the entry → no restart
-   asked, and the new version works. Uninstall → the entry is gone and no
-   restart is asked.
-9. Turn off **Settings → Explorer integration** → the entry and the vault
-   icon go away. Turn it on → they come back.
+8. Installed for all users: sign out and in again → blocked, read-only and
+   hidden items (with hidden files shown) have a padlock badge. Unlock
+   one in the app → its badge goes away at once; lock it → it's back.
+9. Update Folder Locker (Explorer always has the plug-in loaded for the
+   badge) → no restart asked; the new version runs after the next sign-in.
+   Uninstall → the entry is gone and no restart is asked.
+10. Turn off **Settings → Explorer integration** → the entry, the vault
+    icon and the badges go away. Turn it on → they come back.
 
 ## Phase 4: publishing ⏳
 

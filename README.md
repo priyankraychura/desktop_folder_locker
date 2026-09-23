@@ -62,7 +62,9 @@ shown are temporary test folders.</sub>
     folders and files, **Unlock…** on blocked ones, **Open…** on drive
     vaults, and the app does it right away;
   - drive vault folders look locked: the vault icon, and only `vault.flk`
-    inside.
+    inside;
+  - blocked and read-only items show a padlock badge (when installed for
+    all users).
 - **Notification-area icon**: the app keeps running when you close the
   window. The icon shows when items are unlocked, and its menu locks
   everything in one click.

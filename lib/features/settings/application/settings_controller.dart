@@ -56,14 +56,18 @@ class SettingsController extends Notifier<AppSettings> {
       _update(state.copyWith(trayHintShown: true));
 
   /// Adds or removes the Explorer context menu and vault association.
+  ///
+  /// The setting is saved first: the Explorer plug-in reads it (for the
+  /// lock badges) when Explorer refreshes, which the registry change
+  /// starts. If that change fails, the next start of the app tries again.
   Future<void> setExplorerIntegration(bool enabled) async {
+    await _update(state.copyWith(explorerIntegration: enabled));
     final integration = ref.read(explorerIntegrationProvider);
     if (enabled) {
       integration.register();
     } else {
       integration.unregister();
     }
-    await _update(state.copyWith(explorerIntegration: enabled));
   }
 
   /// Makes the registry match the setting at startup: registers again if

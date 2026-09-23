@@ -1,6 +1,7 @@
-//! The right-click command, made the way Explorer makes it (through the
-//! DLL's class factory) and asked about selections, in this process.
-//! `explorer.rs` tests it with Explorer's own menu code.
+//! The right-click command and the lock badge, made the way Explorer makes
+//! them (through the DLL's class factory) and asked about items, in this
+//! process. `explorer.rs` and `badge.rs` test them with Explorer's own
+//! code.
 
 #![cfg(windows)]
 
@@ -8,9 +9,11 @@ mod support;
 
 use std::ffi::c_void;
 
-use folder_locker_shell::{DllCanUnloadNow, DllGetClassObject, CLSID_MENU};
+use folder_locker_shell::{
+    DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU,
+};
 use support::{selection, take_string, Place};
-use windows::core::{IUnknown, Interface, Result, GUID, HSTRING};
+use windows::core::{IUnknown, Interface, Result, GUID, HRESULT, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{
     CLASS_E_CLASSNOTAVAILABLE, CLASS_E_NOAGGREGATION, E_NOTIMPL, S_FALSE, S_OK,
 };
@@ -18,8 +21,9 @@ use windows::Win32::System::Com::{
     CoInitializeEx, IBindCtx, IClassFactory, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::UI::Shell::{
-    IExplorerCommand, IShellItem, IShellItemArray, SHCreateItemFromParsingName,
-    SHCreateShellItemArrayFromShellItem, ECF_DEFAULT, ECS_ENABLED, ECS_HIDDEN,
+    IExplorerCommand, IShellIconOverlayIdentifier, IShellItem, IShellItemArray,
+    SHCreateItemFromParsingName, SHCreateShellItemArrayFromShellItem, ECF_DEFAULT, ECS_ENABLED,
+    ECS_HIDDEN, ISIOI_ICONFILE, ISIOI_ICONINDEX,
 };
 
 /// Explorer's `GetState` and `GetTitle`: the entry's title, if it shows.
@@ -39,13 +43,20 @@ fn class_factory(clsid: &GUID) -> Result<IClassFactory> {
     Ok(unsafe { IClassFactory::from_raw(object) })
 }
 
+// One test: the plug-in reads the list once per process, from the
+// %APPDATA% it finds first, and counts all its objects together.
 #[test]
-fn the_entry_follows_each_item() {
+fn the_plug_in_answers_as_explorer_expects() {
     let place = Place::new();
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
         .ok()
         .unwrap();
+    the_entry_follows_each_item(&place);
+    the_badge_shows_on_protected_items(&place);
+    assert_eq!(DllCanUnloadNow(), S_OK, "all released");
+}
 
+fn the_entry_follows_each_item(place: &Place) {
     assert_eq!(DllCanUnloadNow(), S_OK, "nothing made yet");
     assert_eq!(
         class_factory(&GUID::zeroed()).unwrap_err().code(),
@@ -122,4 +133,36 @@ fn the_entry_follows_each_item() {
     unsafe { factory.LockServer(false) }.unwrap();
     drop(factory);
     assert_eq!(DllCanUnloadNow(), S_OK, "unlocked");
+}
+
+/// Explorer's `IsMemberOf`: S_OK shows the badge, S_FALSE doesn't.
+fn badge_on(badge: &IShellIconOverlayIdentifier, path: &std::path::Path) -> HRESULT {
+    let path = HSTRING::from(path);
+    unsafe { (Interface::vtable(badge).IsMemberOf)(badge.as_raw(), PCWSTR(path.as_ptr()), 0) }
+}
+
+fn the_badge_shows_on_protected_items(place: &Place) {
+    let badge: IShellIconOverlayIdentifier = unsafe {
+        class_factory(&CLSID_BADGE)
+            .unwrap()
+            .CreateInstance(None::<&IUnknown>)
+    }
+    .unwrap();
+
+    assert_eq!(badge_on(&badge, &place.blocked), S_OK);
+    for other in [&place.folder, &place.file, &place.vault, &place.drive_vault] {
+        assert_eq!(badge_on(&badge, other), S_FALSE, "{}", other.display());
+    }
+
+    let mut icon = [0u16; 260];
+    let (mut index, mut flags) = (-1, 0);
+    unsafe { badge.GetOverlayInfo(&mut icon, &mut index, &mut flags) }.unwrap();
+    let length = icon.iter().position(|&c| c == 0).unwrap();
+    let icon = String::from_utf16(&icon[..length]).unwrap();
+    assert!(icon.ends_with(&format!(r"\{BADGE_ICON}")), "{icon}");
+    assert_eq!((index, flags), (0, ISIOI_ICONFILE | ISIOI_ICONINDEX));
+    // Too small a buffer: an error, not an overflow.
+    let mut small = [0u16; 4];
+    assert!(unsafe { badge.GetOverlayInfo(&mut small, &mut index, &mut flags) }.is_err());
+    assert_eq!(unsafe { badge.GetPriority() }.unwrap(), 0);
 }

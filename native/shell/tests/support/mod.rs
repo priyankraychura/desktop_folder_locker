@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::json;
 use windows::core::{HSTRING, PWSTR};
+use windows::Win32::Foundation::ERROR_SUCCESS;
 use windows::Win32::System::Com::CoTaskMemFree;
+use windows::Win32::System::Registry::{RegDeleteTreeW, RegSetKeyValueW, HKEY, REG_SZ};
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
     ILCreateFromPathW, ILFree, IShellItemArray, SHCreateShellItemArrayFromIDLists,
@@ -95,4 +97,39 @@ pub fn take_string(value: PWSTR) -> String {
     let text = unsafe { value.to_string() }.unwrap();
     unsafe { CoTaskMemFree(Some(value.0.cast_const().cast())) };
     text
+}
+
+/// `folder_locker_shell.dll`, built along with the tests.
+pub fn built_dll() -> PathBuf {
+    let deps = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_owned();
+    [deps.parent().unwrap(), deps.as_path()]
+        .iter()
+        .map(|dir| dir.join("folder_locker_shell.dll"))
+        .find(|dll| dll.exists())
+        .expect("folder_locker_shell.dll is built")
+}
+
+/// Writes a string value in the registry, creating the key.
+pub fn set(root: HKEY, key: &str, name: &str, value: &str) {
+    let data: Vec<u16> = value.encode_utf16().chain(Some(0)).collect();
+    let result = unsafe {
+        RegSetKeyValueW(
+            root,
+            &HSTRING::from(key),
+            &HSTRING::from(name),
+            REG_SZ.0,
+            Some(data.as_ptr().cast()),
+            (data.len() * 2) as u32,
+        )
+    };
+    assert_eq!(result, ERROR_SUCCESS, "writing {key}");
+}
+
+/// Removes a registry key and everything in it, if it's there.
+pub fn remove_key(root: HKEY, key: &str) {
+    let _ = unsafe { RegDeleteTreeW(root, &HSTRING::from(key)) };
 }

@@ -109,7 +109,8 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 
 # The drive helper and the Explorer plug-in (native/), when they have been
 # built with `cargo build --release` in native/: copied next to the app,
-# where the app looks for them. CI and the installer use the release build.
+# where the app looks for them, with the plug-in's lock badge icon. CI and
+# the installer use the release build.
 set(NATIVE_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../native/target/release")
 foreach(NATIVE_FILE folder_locker_drive.exe folder_locker_shell.dll)
   if(EXISTS "${NATIVE_RELEASE}/${NATIVE_FILE}")
@@ -117,3 +118,7 @@ foreach(NATIVE_FILE folder_locker_drive.exe folder_locker_shell.dll)
       DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
   endif()
 endforeach()
+if(EXISTS "${NATIVE_RELEASE}/folder_locker_shell.dll")
+  install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/lock_badge.ico"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+endif()
