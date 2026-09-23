@@ -392,6 +392,35 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     }
   }
 
+  /// Locks every unlocked item that needs no typed password, one after
+  /// the other (only those that pass [where], if given).
+  ///
+  /// Returns the items that stayed unlocked: they need their own
+  /// password, a file in them is in use, or another operation was running.
+  Future<List<ProtectedItem>> lockAllUnlocked({
+    bool Function(ProtectedItem item)? where,
+  }) async {
+    final left = <ProtectedItem>[];
+    for (final listed in [..._items.items]) {
+      // The list changes as items are locked: always use the latest copy.
+      final item = _items.byId(listed.id);
+      if (item == null || item.isProtected || !_items.existsOnDisk(item)) {
+        continue;
+      }
+      if (where != null && !where(item)) continue;
+      if (lockRequirement(item) != LockRequirement.none) {
+        left.add(item);
+        continue;
+      }
+      try {
+        await lockAgain(item);
+      } on Object {
+        left.add(item);
+      }
+    }
+    return left;
+  }
+
   /// Stops managing an item. Only allowed once it is unlocked (or its
   /// files are gone), so nothing stays encrypted without being listed.
   Future<void> remove(ProtectedItem item) async {

@@ -8,6 +8,11 @@ class AppSettings {
     this.explorerIntegration = true,
     this.askToLockOnExit = true,
     this.openAfterUnlock = true,
+    this.keepRunningInTray = true,
+    this.remindAfterMinutes = 30,
+    this.relockAfterMinutes = 0,
+    this.lockItemsWithApp = false,
+    this.trayHintShown = false,
   });
 
   factory AppSettings.fromJson(Map<String, Object?> json) => AppSettings(
@@ -17,6 +22,11 @@ class AppSettings {
     explorerIntegration: json['explorerIntegration'] as bool? ?? true,
     askToLockOnExit: json['askToLockOnExit'] as bool? ?? true,
     openAfterUnlock: json['openAfterUnlock'] as bool? ?? true,
+    keepRunningInTray: json['keepRunningInTray'] as bool? ?? true,
+    remindAfterMinutes: json['remindAfterMinutes'] as int? ?? 30,
+    relockAfterMinutes: json['relockAfterMinutes'] as int? ?? 0,
+    lockItemsWithApp: json['lockItemsWithApp'] as bool? ?? false,
+    trayHintShown: json['trayHintShown'] as bool? ?? false,
   );
 
   final ThemeMode themeMode;
@@ -33,7 +43,24 @@ class AppSettings {
   /// Open the folder in Explorer right after unlocking it.
   final bool openAfterUnlock;
 
+  /// Closing the window keeps the app running in the notification area,
+  /// so reminders and automatic locking keep working.
+  final bool keepRunningInTray;
+
+  /// Remind about items that stay unlocked this long (0 = never).
+  final int remindAfterMinutes;
+
+  /// Lock items again after they have been unlocked this long (0 = never).
+  final int relockAfterMinutes;
+
+  /// Lock unlocked items too when the app locks.
+  final bool lockItemsWithApp;
+
+  /// Whether the user was told once that closing keeps the app running.
+  final bool trayHintShown;
+
   static const List<int> autoLockChoices = [0, 1, 5, 15, 30, 60];
+  static const List<int> unlockedItemChoices = [0, 15, 30, 60, 120];
 
   AppSettings copyWith({
     ThemeMode? themeMode,
@@ -41,12 +68,22 @@ class AppSettings {
     bool? explorerIntegration,
     bool? askToLockOnExit,
     bool? openAfterUnlock,
+    bool? keepRunningInTray,
+    int? remindAfterMinutes,
+    int? relockAfterMinutes,
+    bool? lockItemsWithApp,
+    bool? trayHintShown,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     autoLockMinutes: autoLockMinutes ?? this.autoLockMinutes,
     explorerIntegration: explorerIntegration ?? this.explorerIntegration,
     askToLockOnExit: askToLockOnExit ?? this.askToLockOnExit,
     openAfterUnlock: openAfterUnlock ?? this.openAfterUnlock,
+    keepRunningInTray: keepRunningInTray ?? this.keepRunningInTray,
+    remindAfterMinutes: remindAfterMinutes ?? this.remindAfterMinutes,
+    relockAfterMinutes: relockAfterMinutes ?? this.relockAfterMinutes,
+    lockItemsWithApp: lockItemsWithApp ?? this.lockItemsWithApp,
+    trayHintShown: trayHintShown ?? this.trayHintShown,
   );
 
   Map<String, Object?> toJson() => {
@@ -55,5 +92,10 @@ class AppSettings {
     'explorerIntegration': explorerIntegration,
     'askToLockOnExit': askToLockOnExit,
     'openAfterUnlock': openAfterUnlock,
+    'keepRunningInTray': keepRunningInTray,
+    'remindAfterMinutes': remindAfterMinutes,
+    'relockAfterMinutes': relockAfterMinutes,
+    'lockItemsWithApp': lockItemsWithApp,
+    'trayHintShown': trayHintShown,
   };
 }

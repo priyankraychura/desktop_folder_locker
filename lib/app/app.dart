@@ -11,6 +11,7 @@ import 'app_gate.dart';
 import 'widgets/activity_detector.dart';
 import 'widgets/close_guard.dart';
 import 'widgets/launch_intent_handler.dart';
+import 'widgets/tray_handler.dart';
 
 /// The root widget.
 class FolderLockerApp extends ConsumerWidget {
@@ -32,13 +33,16 @@ class FolderLockerApp extends ConsumerWidget {
       navigatorKey: rootNavigatorKey,
       scaffoldMessengerKey: rootMessengerKey,
       // App-wide behavior lives above the navigator so it also covers
-      // dialogs: activity tracking, close confirmation, Explorer requests
-      // and the progress overlay.
+      // dialogs: activity tracking, close confirmation, the tray icon,
+      // Explorer requests and the progress overlay.
       builder: (context, child) => ActivityDetector(
         child: CloseGuard(
           enabled: nativeWindow,
-          child: LaunchIntentHandler(
-            child: OperationOverlay(child: child ?? const SizedBox.shrink()),
+          child: TrayHandler(
+            nativeWindow: nativeWindow,
+            child: LaunchIntentHandler(
+              child: OperationOverlay(child: child ?? const SizedBox.shrink()),
+            ),
           ),
         ),
       ),

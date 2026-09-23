@@ -40,6 +40,21 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> setOpenAfterUnlock(bool value) =>
       _update(state.copyWith(openAfterUnlock: value));
 
+  Future<void> setKeepRunningInTray(bool value) =>
+      _update(state.copyWith(keepRunningInTray: value));
+
+  Future<void> setRemindAfterMinutes(int minutes) =>
+      _update(state.copyWith(remindAfterMinutes: minutes));
+
+  Future<void> setRelockAfterMinutes(int minutes) =>
+      _update(state.copyWith(relockAfterMinutes: minutes));
+
+  Future<void> setLockItemsWithApp(bool value) =>
+      _update(state.copyWith(lockItemsWithApp: value));
+
+  Future<void> markTrayHintShown() =>
+      _update(state.copyWith(trayHintShown: true));
+
   /// Adds or removes the Explorer context menu and vault association.
   Future<void> setExplorerIntegration(bool enabled) async {
     final integration = ref.read(explorerIntegrationProvider);

@@ -14,7 +14,9 @@ import '../features/settings/application/settings_controller.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/shell/application/launch_intents.dart';
 import '../platform/single_instance.dart';
+import '../platform/system_tray.dart';
 import 'app.dart';
+import 'window_actions.dart';
 
 /// Starts the app.
 ///
@@ -47,6 +49,8 @@ Future<void> bootstrap(List<String> args) async {
       executablePathProvider.overrideWithValue(Platform.resolvedExecutable),
       nativeWindowProvider.overrideWithValue(isDesktop),
       initialSettingsProvider.overrideWithValue(settings),
+      if (Platform.isWindows)
+        systemTrayProvider.overrideWithValue(NativeSystemTray()),
     ],
     // Errors are shown to the user right away instead of being retried.
     retry: (_, _) => null,
@@ -55,10 +59,7 @@ Future<void> bootstrap(List<String> args) async {
   final intents = container.read(launchIntentsProvider.notifier)..addArgs(args);
   instance.messages.listen((forwarded) async {
     intents.addArgs(forwarded);
-    if (!isDesktop) return;
-    if (await windowManager.isMinimized()) await windowManager.restore();
-    await windowManager.show();
-    await windowManager.focus();
+    if (isDesktop) await showMainWindow();
   });
   instance.deliverPending();
 

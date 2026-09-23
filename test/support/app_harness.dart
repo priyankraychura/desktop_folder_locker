@@ -14,17 +14,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'fake_access_rules.dart';
+import 'fake_system_tray.dart';
 
 /// Runs the real app against a temporary data folder, with cheap password
 /// hashing and no native window.
 class AppHarness {
-  AppHarness._(this.root, this.container, this.accessRules);
+  AppHarness._(this.root, this.container, this.accessRules, this.tray);
 
   final Directory root;
   final ProviderContainer container;
 
   /// Stands in for Windows permission rules (Block access, Read-only).
   final FakeAccessRules accessRules;
+
+  /// Stands in for the notification-area icon.
+  final FakeSystemTray tray;
 
   static Future<AppHarness> create({
     AppSettings settings = const AppSettings(),
@@ -33,6 +37,7 @@ class AppHarness {
     final crypto = await CryptoService.create();
     final paths = AppPaths(p.join(root.path, 'appdata'))..ensureExists();
     final accessRules = FakeAccessRules();
+    final tray = FakeSystemTray();
     final container = ProviderContainer(
       overrides: [
         appPathsProvider.overrideWithValue(paths),
@@ -46,10 +51,11 @@ class AppHarness {
         // path guard refuses; tests don't need system folder protection.
         environmentProvider.overrideWithValue(const {}),
         accessRulesProvider.overrideWithValue(accessRules),
+        systemTrayProvider.overrideWithValue(tray),
       ],
       retry: (_, _) => null,
     );
-    return AppHarness._(root, container, accessRules);
+    return AppHarness._(root, container, accessRules, tray);
   }
 
   /// A folder for user files (outside the app data folder).

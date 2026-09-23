@@ -5,6 +5,9 @@
 Writes:
   windows/runner/resources/app_icon.ico    app / taskbar icon
   windows/runner/resources/vault_icon.ico  icon of .flk vault files in Explorer
+  windows/runner/resources/tray_attention.ico
+                                           notification-area icon while items
+                                           are unlocked (app icon + amber dot)
   assets/icons/app_icon.png                512 px previews (README)
   assets/icons/vault_icon.png
 
@@ -20,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CANVAS = 1024
 SIZES = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
 
+AMBER = (245, 158, 11)
 INDIGO = (99, 102, 241)
 VIOLET = (139, 92, 246)
 DEEP = (67, 56, 202)
@@ -115,6 +119,16 @@ def vault_icon():
     return icon
 
 
+def tray_attention_icon():
+    """The app icon with an amber dot, drawn big enough to read at 16 px."""
+    icon = app_icon()
+    draw = ImageDraw.Draw(icon)
+    cx, cy, r = CANVAS - 230, CANVAS - 230, 200
+    draw.ellipse((cx - r - 40, cy - r - 40, cx + r + 40, cy + r + 40), fill=WHITE)
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=AMBER + (255,))
+    return icon
+
+
 def save_ico(image, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     frames = [image.resize((s, s), Image.LANCZOS) for s in SIZES]
@@ -126,6 +140,7 @@ def main():
     app = app_icon()
     save_ico(app, resources / "app_icon.ico")
     save_ico(vault_icon(), resources / "vault_icon.ico")
+    save_ico(tray_attention_icon(), resources / "tray_attention.ico")
     preview = ROOT / "assets" / "icons" / "app_icon.png"
     preview.parent.mkdir(parents=True, exist_ok=True)
     app.resize((512, 512), Image.LANCZOS).save(preview)

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,11 +9,11 @@ import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/window_title_bar.dart';
-import '../../auth/application/session_controller.dart';
 import '../../items/application/items_controller.dart';
 import '../../items/domain/protected_item.dart';
 import '../../items/presentation/items_page.dart';
 import '../../settings/presentation/settings_page.dart';
+import 'lock_app_action.dart';
 import 'widgets/sidebar.dart';
 
 /// The main window once the app is unlocked: sidebar + content panel.
@@ -48,7 +50,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     ref.read(recoveryReportProvider.notifier).clear();
   }
 
-  void _lockApp() => ref.read(sessionControllerProvider.notifier).lock();
+  void _lockApp() => unawaited(lockAppWithFeedback(ref));
 
   @override
   Widget build(BuildContext context) {

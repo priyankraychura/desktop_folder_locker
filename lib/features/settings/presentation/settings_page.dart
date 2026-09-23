@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/error_text.dart';
 import '../../../core/constants/app_info.dart';
+import '../../../core/di/core_providers.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/utils/formatters.dart';
@@ -22,18 +23,36 @@ import '../domain/app_settings.dart';
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
-  static String _autoLockLabel(int minutes) => switch (minutes) {
+  static String _afterLabel(int minutes) => switch (minutes) {
     0 => 'Never',
     1 => 'After 1 minute',
     60 => 'After 1 hour',
+    120 => 'After 2 hours',
     _ => 'After $minutes minutes',
   };
+
+  static Widget _minutesMenu({
+    required int value,
+    required List<int> choices,
+    required ValueChanged<int> onSelected,
+  }) => DropdownMenu<int>(
+    width: 190,
+    initialSelection: value,
+    dropdownMenuEntries: [
+      for (final minutes in choices)
+        DropdownMenuEntry(value: minutes, label: _afterLabel(minutes)),
+    ],
+    onSelected: (minutes) {
+      if (minutes != null) onSelected(minutes);
+    },
+  );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     final keystore = ref.watch(sessionControllerProvider).keystore;
+    final hasTray = ref.watch(systemTrayProvider).isAvailable;
 
     Future<void> guarded(Future<void> Function() action) async {
       try {
@@ -105,21 +124,11 @@ class SettingsPage extends ConsumerWidget {
               subtitle:
                   'Locks after a period without mouse or keyboard activity. '
                   'Running operations are never interrupted.',
-              trailing: DropdownMenu<int>(
-                width: 190,
-                initialSelection: settings.autoLockMinutes,
-                dropdownMenuEntries: [
-                  for (final minutes in AppSettings.autoLockChoices)
-                    DropdownMenuEntry(
-                      value: minutes,
-                      label: _autoLockLabel(minutes),
-                    ),
-                ],
-                onSelected: (minutes) {
-                  if (minutes != null) {
-                    unawaited(controller.setAutoLockMinutes(minutes));
-                  }
-                },
+              trailing: _minutesMenu(
+                value: settings.autoLockMinutes,
+                choices: AppSettings.autoLockChoices,
+                onSelected: (minutes) =>
+                    unawaited(controller.setAutoLockMinutes(minutes)),
               ),
             ),
             SettingsRow(
@@ -147,6 +156,65 @@ class SettingsPage extends ConsumerWidget {
                 tone: Tone.success,
                 icon: Icons.check_rounded,
                 label: 'Active',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        SectionCard(
+          title: 'Unlocked items',
+          children: [
+            SettingsRow(
+              icon: Icons.notifications_active_outlined,
+              tone: Tone.warning,
+              title: 'Remind me',
+              subtitle:
+                  'Shows a notification when an item has been unlocked for '
+                  'a while.',
+              trailing: _minutesMenu(
+                value: settings.remindAfterMinutes,
+                choices: AppSettings.unlockedItemChoices,
+                onSelected: (minutes) =>
+                    unawaited(controller.setRemindAfterMinutes(minutes)),
+              ),
+            ),
+            SettingsRow(
+              icon: Icons.lock_clock_outlined,
+              tone: Tone.primary,
+              title: 'Lock them again automatically',
+              subtitle:
+                  'Items that don\'t need a typed password are locked again '
+                  'after this time. If a file is still open, it is retried '
+                  'later.',
+              trailing: _minutesMenu(
+                value: settings.relockAfterMinutes,
+                choices: AppSettings.unlockedItemChoices,
+                onSelected: (minutes) =>
+                    unawaited(controller.setRelockAfterMinutes(minutes)),
+              ),
+            ),
+            SettingsRow(
+              icon: Icons.lock_person_outlined,
+              tone: Tone.accent,
+              title: 'Lock them when the app locks',
+              subtitle:
+                  'When ${AppInfo.name} locks, by hand or after inactivity, '
+                  'unlocked items are locked too.',
+              trailing: Switch(
+                value: settings.lockItemsWithApp,
+                onChanged: (value) =>
+                    unawaited(controller.setLockItemsWithApp(value)),
+              ),
+            ),
+            SettingsRow(
+              icon: Icons.exit_to_app_rounded,
+              tone: Tone.info,
+              title: 'Ask when quitting',
+              subtitle: 'Offer to lock unlocked items when the app quits.',
+              trailing: Switch(
+                value: settings.askToLockOnExit,
+                onChanged: (value) =>
+                    unawaited(controller.setAskToLockOnExit(value)),
               ),
             ),
           ],
@@ -188,14 +256,20 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
             SettingsRow(
-              icon: Icons.exit_to_app_rounded,
-              tone: Tone.warning,
-              title: 'Remind me when closing',
-              subtitle: 'Offer to lock unlocked items when the app closes.',
+              icon: Icons.notifications_none_rounded,
+              tone: Tone.accent,
+              title: 'Keep running in the notification area',
+              subtitle: hasTray
+                  ? 'Closing the window keeps ${AppInfo.name} running with an '
+                        'icon next to the clock, so reminders and automatic '
+                        'locking keep working.'
+                  : 'Only available on Windows.',
               trailing: Switch(
-                value: settings.askToLockOnExit,
-                onChanged: (value) =>
-                    unawaited(controller.setAskToLockOnExit(value)),
+                value: hasTray && settings.keepRunningInTray,
+                onChanged: hasTray
+                    ? (value) =>
+                          unawaited(controller.setKeepRunningInTray(value))
+                    : null,
               ),
             ),
           ],

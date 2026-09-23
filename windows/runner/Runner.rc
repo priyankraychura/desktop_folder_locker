@@ -55,6 +55,8 @@ END
 IDI_APP_ICON            ICON                    "resources\\app_icon.ico"
 // Shown by Explorer for .flk vault files (DefaultIcon "<exe>",-102).
 IDI_VAULT_ICON          ICON                    "resources\\vault_icon.ico"
+// Notification-area icon while some items are unlocked.
+IDI_TRAY_ATTENTION      ICON                    "resources\\tray_attention.ico"
 
 
 /////////////////////////////////////////////////////////////////////////////

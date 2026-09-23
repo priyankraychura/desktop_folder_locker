@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../items/application/protection_controller.dart';
 import '../../settings/application/settings_controller.dart';
+import 'app_locker.dart';
 import 'session_controller.dart';
 
 final autoLockProvider = Provider<AutoLock>((ref) {
@@ -34,7 +35,7 @@ class AutoLock {
     if (!session.isUnlocked || busy) return;
     if (DateTime.now().difference(_lastActivity) >=
         Duration(minutes: minutes)) {
-      _ref.read(sessionControllerProvider.notifier).lock();
+      unawaited(_ref.read(appLockerProvider).lockApp());
     }
   }
 
