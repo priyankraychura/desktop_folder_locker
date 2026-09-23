@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:desktop_folder_locker/engine/crypto/crypto_service.dart';
 import 'package:desktop_folder_locker/engine/crypto/kdf_params.dart';
+import 'package:desktop_folder_locker/engine/vault/fs_utils.dart';
 import 'package:desktop_folder_locker/engine/vault/vault_keys.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -21,7 +22,15 @@ class TestEnv {
     return TestEnv._(crypto, root);
   }
 
-  Future<void> dispose() => root.delete(recursive: true);
+  /// Deletes everything the test made, like the app deletes vaults: also
+  /// read-only and hidden entries, such as a drive vault folder's look
+  /// (which Windows won't delete otherwise).
+  Future<void> dispose() async {
+    final failures = FsUtils.deleteTree(root.path);
+    if (failures.isNotEmpty) {
+      throw FileSystemException('Could not delete', failures.first);
+    }
+  }
 
   String path(String relative) => p.join(root.path, relative);
 

@@ -5,6 +5,7 @@ import 'package:desktop_folder_locker/core/di/core_providers.dart';
 import 'package:desktop_folder_locker/core/storage/app_paths.dart';
 import 'package:desktop_folder_locker/engine/crypto/crypto_service.dart';
 import 'package:desktop_folder_locker/engine/crypto/kdf_params.dart';
+import 'package:desktop_folder_locker/engine/vault/fs_utils.dart';
 import 'package:desktop_folder_locker/features/settings/application/settings_controller.dart';
 import 'package:desktop_folder_locker/features/settings/domain/app_settings.dart';
 import 'package:flutter/material.dart';
@@ -102,8 +103,13 @@ class AppHarness {
     await tester.pump();
   }
 
+  /// Deletes the test's folders, also read-only and hidden entries (see
+  /// `TestEnv.dispose`).
   Future<void> dispose() async {
-    if (root.existsSync()) await root.delete(recursive: true);
+    final failures = FsUtils.deleteTree(root.path);
+    if (failures.isNotEmpty) {
+      throw FileSystemException('Could not delete', failures.first);
+    }
   }
 }
 
