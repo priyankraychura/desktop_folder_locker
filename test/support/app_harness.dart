@@ -14,12 +14,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'fake_access_rules.dart';
+import 'fake_drive_service.dart';
 import 'fake_system_tray.dart';
 
 /// Runs the real app against a temporary data folder, with cheap password
 /// hashing and no native window.
 class AppHarness {
-  AppHarness._(this.root, this.container, this.accessRules, this.tray);
+  AppHarness._(
+    this.root,
+    this.container,
+    this.accessRules,
+    this.tray,
+    this.drives,
+  );
 
   final Directory root;
   final ProviderContainer container;
@@ -30,14 +37,20 @@ class AppHarness {
   /// Stands in for the notification-area icon.
   final FakeSystemTray tray;
 
+  /// Stands in for the drive helper.
+  final FakeDriveService drives;
+
   static Future<AppHarness> create({
     AppSettings settings = const AppSettings(),
+    Directory? root,
+    FakeDriveService? drives,
   }) async {
-    final root = await Directory.systemTemp.createTemp('flk_app_');
+    root ??= await Directory.systemTemp.createTemp('flk_app_');
     final crypto = await CryptoService.create();
     final paths = AppPaths(p.join(root.path, 'appdata'))..ensureExists();
     final accessRules = FakeAccessRules();
     final tray = FakeSystemTray();
+    drives ??= FakeDriveService();
     final container = ProviderContainer(
       overrides: [
         appPathsProvider.overrideWithValue(paths),
@@ -52,10 +65,11 @@ class AppHarness {
         environmentProvider.overrideWithValue(const {}),
         accessRulesProvider.overrideWithValue(accessRules),
         systemTrayProvider.overrideWithValue(tray),
+        driveServiceProvider.overrideWithValue(drives),
       ],
       retry: (_, _) => null,
     );
-    return AppHarness._(root, container, accessRules, tray);
+    return AppHarness._(root, container, accessRules, tray, drives);
   }
 
   /// A folder for user files (outside the app data folder).

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+
 import '../crypto/crypto_service.dart';
 import '../engine_exception.dart';
 import 'byte_io.dart';
@@ -21,17 +23,36 @@ import 'key_slot.dart';
 /// Key slots live in two copies ("areas"). Each area has a generation number
 /// and a BLAKE2b checksum. Changing a password rewrites only the *older*
 /// area, so a crash in the middle of a rewrite always leaves one valid copy.
+///
+/// Drive vaults (format version 2, see `docs/DRIVE_VAULT.md`) use the same
+/// header as `vault.flk` inside their folder, with the [flagDrive] flag;
+/// their "chunk size" is the block size of their files. Their contents are
+/// read and written by the drive helper, not by this engine.
 class VaultHeader {
   const VaultHeader({
     required this.vaultId,
     required this.chunkSize,
     required this.slots,
+    this.version = classicVersion,
+    this.flags = 0,
     this.generation = 1,
     this.activeArea = 0,
   });
 
   static final Uint8List magic = ascii.encode('FLKVAULT');
-  static const int formatVersion = 1;
+
+  /// A single-file vault (`Name.flk`).
+  static const int classicVersion = 1;
+
+  /// A drive vault (`Name.flkd` folder).
+  static const int driveVersion = 2;
+
+  /// Set in drive vaults.
+  static const int flagDrive = 1;
+
+  /// Block size of the files in new drive vaults.
+  static const int driveBlockSize = 64 * 1024;
+
   static const int blockSize = 4096;
   static const int prefixLength = 64;
   static const int vaultIdLength = 16;
@@ -52,24 +73,37 @@ class VaultHeader {
   final int chunkSize;
   final List<KeySlot> slots;
 
+  /// [classicVersion] or [driveVersion].
+  final int version;
+  final int flags;
+
   /// Generation of the slot area this header was read from.
   final int generation;
 
   /// Index (0 or 1) of the slot area this header was read from.
   final int activeArea;
 
+  bool get isDrive => version == driveVersion;
+
   /// The immutable first 64 bytes. Used as associated data, so chunks and
   /// key slots can't be moved into another vault.
-  Uint8List get prefix => buildPrefix(vaultId: vaultId, chunkSize: chunkSize);
+  Uint8List get prefix => buildPrefix(
+    vaultId: vaultId,
+    chunkSize: chunkSize,
+    version: version,
+    flags: flags,
+  );
 
   static Uint8List buildPrefix({
     required Uint8List vaultId,
     required int chunkSize,
+    int version = classicVersion,
+    int flags = 0,
   }) {
     final writer = ByteWriter()
       ..bytes(magic)
-      ..u16(formatVersion)
-      ..u16(0) // flags
+      ..u16(version)
+      ..u16(flags)
       ..u32(blockSize)
       ..bytes(vaultId)
       ..u32(chunkSize)
@@ -130,9 +164,14 @@ class VaultHeader {
       );
     }
     final version = reader.u16();
-    reader.u16(); // flags, unused in version 1
+    final flags = reader.u16();
     final headerSize = reader.u32();
-    if (version > formatVersion || headerSize != blockSize) {
+    final known = switch (version) {
+      classicVersion => flags == 0,
+      driveVersion => flags == flagDrive,
+      _ => false,
+    };
+    if (!known || headerSize != blockSize) {
       throw const EngineException(
         EngineErrorCode.unsupportedVersion,
         'The vault was created by a newer version of Folder Locker',
@@ -174,6 +213,8 @@ class VaultHeader {
       vaultId: vaultId,
       chunkSize: chunkSize,
       slots: best.slots,
+      version: version,
+      flags: flags,
       generation: best.generation,
       activeArea: best.area,
     );
@@ -201,8 +242,20 @@ class VaultHeader {
     return (generation: generation, slots: slots);
   }
 
-  /// Reads and parses the header of the vault at [path].
+  /// The file that holds the header of the vault at [path]: the vault
+  /// itself, or `vault.flk` inside a drive vault's folder.
+  static String headerFile(String path) =>
+      FileSystemEntity.isDirectorySync(path)
+      ? p.join(path, driveHeaderFileName)
+      : path;
+
+  /// Name of the header file inside a drive vault's folder.
+  static const String driveHeaderFileName = 'vault.flk';
+
+  /// Reads and parses the header of the vault at [path] (a vault file or a
+  /// drive vault's folder).
   static VaultHeader read(String path, CryptoService crypto) {
+    path = headerFile(path);
     final file = File(path);
     final RandomAccessFile raf;
     try {
@@ -238,7 +291,7 @@ class VaultHeader {
     final nextArea = 1 - current.activeArea;
     final nextGeneration = current.generation + 1;
     final area = encodeSlotArea(crypto, current.prefix, nextGeneration, slots);
-    final raf = File(path).openSync(mode: FileMode.append);
+    final raf = File(headerFile(path)).openSync(mode: FileMode.append);
     try {
       raf
         ..setPositionSync(_areaOffsets[nextArea])
@@ -251,6 +304,8 @@ class VaultHeader {
       vaultId: current.vaultId,
       chunkSize: current.chunkSize,
       slots: slots,
+      version: current.version,
+      flags: current.flags,
       generation: nextGeneration,
       activeArea: nextArea,
     );

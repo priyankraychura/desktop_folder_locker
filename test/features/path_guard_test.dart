@@ -59,6 +59,9 @@ void main() {
     expect(guard.check(p.rootPrefix(root.path), []), PathProblem.driveRoot);
     final vault = File(p.join(root.path, 'x.flk'))..writeAsStringSync('v');
     expect(guard.check(vault.path, []), PathProblem.isVault);
+    // Drive vaults are folders: they, and everything in them, are vaults.
+    expect(guard.check(dir('Taxes.flkd'), []), PathProblem.isVault);
+    expect(guard.check(dir('Taxes.flkd/data'), []), PathProblem.isVault);
   });
 
   test('refuses system folders, their contents and their parents', () {

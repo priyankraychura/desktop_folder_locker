@@ -12,30 +12,40 @@ import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/password_field.dart';
 import '../../../../engine/crypto/recovery_key.dart';
 import '../../../../engine/engine_exception.dart';
+import '../../../../engine/vault/drive_vault.dart';
 import '../../../../engine/vault/vault_keys.dart';
 import '../../../auth/application/session_controller.dart';
 import '../../application/protection_controller.dart';
 import '../../domain/protected_item.dart';
 
-/// Asks for the password (or recovery key) of a vault and unlocks it.
+/// Asks for the password (or recovery key) of a vault and unlocks it (a
+/// drive vault opens as a drive).
 ///
 /// Pass the [item] when the vault is in the list; without it, the vault is
-/// added to the list after unlocking. Returns `null` if cancelled.
+/// added to the list after unlocking. With [decrypt], a drive item is
+/// turned back into a normal folder instead. Returns `null` if cancelled.
 Future<UnlockOutcome?> showUnlockDialog(
   BuildContext context, {
   required String vaultPath,
   ProtectedItem? item,
+  bool decrypt = false,
 }) => showDialog<UnlockOutcome>(
   context: context,
   barrierDismissible: false,
-  builder: (_) => _UnlockDialog(vaultPath: vaultPath, item: item),
+  builder: (_) =>
+      _UnlockDialog(vaultPath: vaultPath, item: item, decrypt: decrypt),
 );
 
 class _UnlockDialog extends ConsumerStatefulWidget {
-  const _UnlockDialog({required this.vaultPath, this.item});
+  const _UnlockDialog({
+    required this.vaultPath,
+    this.item,
+    this.decrypt = false,
+  });
 
   final String vaultPath;
   final ProtectedItem? item;
+  final bool decrypt;
 
   @override
   ConsumerState<_UnlockDialog> createState() => _UnlockDialogState();
@@ -51,8 +61,18 @@ class _UnlockDialogState extends ConsumerState<_UnlockDialog> {
 
   ProtectedItem? get _item => widget.item;
 
+  bool get _isDrive =>
+      _item?.isDrive ?? DriveVault.isDrivePath(widget.vaultPath);
+
   String get _name =>
-      _item?.name ?? p.basenameWithoutExtension(widget.vaultPath);
+      _item?.name ??
+      p.basenameWithoutExtension(DriveVault.folderOf(widget.vaultPath));
+
+  String get _action => widget.decrypt
+      ? 'Decrypt'
+      : _isDrive
+      ? 'Open'
+      : 'Unlock';
 
   @override
   void dispose() {
@@ -99,6 +119,8 @@ class _UnlockDialogState extends ConsumerState<_UnlockDialog> {
       final item = _item;
       final outcome = item == null
           ? await controller.unlockUnknownVault(widget.vaultPath, credential)
+          : widget.decrypt
+          ? await controller.decryptDrive(item, credential: credential)
           : await controller.unlock(item, credential: credential);
       if (mounted) Navigator.of(context).pop(outcome);
     } on Object catch (error) {
@@ -124,8 +146,14 @@ class _UnlockDialogState extends ConsumerState<_UnlockDialog> {
   Widget build(BuildContext context) {
     final hint = _hint;
     return AppDialog(
-      icon: Icons.lock_open_rounded,
-      title: 'Unlock “$_name”',
+      icon: widget.decrypt
+          ? Icons.no_encryption_rounded
+          : _isDrive
+          ? Icons.storage_rounded
+          : Icons.lock_open_rounded,
+      title: widget.decrypt
+          ? 'Decrypt “$_name” to a folder'
+          : '$_action “$_name”',
       subtitle: Format.middleEllipsis(widget.vaultPath, 70),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -218,8 +246,12 @@ class _UnlockDialogState extends ConsumerState<_UnlockDialog> {
           child: const Text('Cancel'),
         ),
         LoadingButton(
-          label: 'Unlock',
-          icon: Icons.lock_open_rounded,
+          label: _action,
+          icon: widget.decrypt
+              ? Icons.no_encryption_rounded
+              : _isDrive
+              ? Icons.storage_rounded
+              : Icons.lock_open_rounded,
           busy: _busy,
           onPressed: _submit,
         ),

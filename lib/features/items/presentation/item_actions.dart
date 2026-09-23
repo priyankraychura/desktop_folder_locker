@@ -7,10 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../app/error_text.dart';
+import '../../../core/di/core_providers.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../engine/engine_exception.dart';
+import '../../../engine/vault/drive_vault.dart';
 import '../../../engine/vault/fs_utils.dart';
 import '../../../platform/shell_actions.dart';
 import '../../auth/application/session_controller.dart';
@@ -60,11 +62,17 @@ class ItemActions {
       return;
     }
     if (!_context.mounted) return;
+    final isFolder = FsUtils.isDirectory(path);
+    // The dialog shows a failure (no helper); it's handled there, later.
+    final driveStatus = isFolder
+        ? (_ref.read(driveServiceProvider).status()..ignore())
+        : null;
     final choice = await showProtectDialog(
       _context,
       path: path,
-      kind: FsUtils.isDirectory(path) ? ItemKind.folder : ItemKind.file,
+      kind: isFolder ? ItemKind.folder : ItemKind.file,
       accessProblem: _controller.accessRuleProblem(path),
+      driveStatus: driveStatus,
     );
     if (choice == null) return;
     await _run(() async {
@@ -82,14 +90,15 @@ class ItemActions {
     });
   }
 
-  /// Unlocks an item, asking for a password only when needed.
+  /// Unlocks an item (a drive item opens as a drive), asking for a
+  /// password only when needed.
   Future<void> unlock(ProtectedItem item, {bool? openAfter}) async {
     final open =
         openAfter ?? _ref.read(settingsControllerProvider).openAfterUnlock;
     UnlockOutcome? outcome;
 
     final canSkipPassword =
-        !item.encrypt || _controller.sessionCredential(item) != null;
+        !item.method.encrypts || _controller.sessionCredential(item) != null;
     if (canSkipPassword) {
       try {
         outcome = await _controller.unlock(item);
@@ -164,8 +173,48 @@ class ItemActions {
     }
   }
 
+  /// Turns a drive item back into a normal folder, after asking.
+  Future<void> decrypt(ProtectedItem item) async {
+    final vaultPath = item.vaultPath;
+    if (vaultPath == null) return;
+    final confirmed = await showConfirmDialog(
+      _context,
+      title: 'Decrypt “${item.name}” to a folder?',
+      message:
+          'Its files are decrypted into a normal folder in the same place, '
+          'and the encrypted vault is deleted. ${item.isMounted ? 'The drive '
+                    'closes first. ' : ''}You can lock the folder again at '
+          'any time.',
+      confirmLabel: 'Decrypt',
+      icon: Icons.no_encryption_rounded,
+      tone: Tone.warning,
+    );
+    if (!confirmed) return;
+    UnlockOutcome? outcome;
+    if (_controller.sessionCredential(item) != null) {
+      try {
+        outcome = await _controller.decryptDrive(item);
+      } on Object catch (error) {
+        if (!isWrongPassword(error)) {
+          _toastError(error);
+          return;
+        }
+      }
+    }
+    if (outcome == null) {
+      if (!_context.mounted) return;
+      outcome = await showUnlockDialog(
+        _context,
+        vaultPath: vaultPath,
+        item: _ref.read(itemsControllerProvider.notifier).byId(item.id),
+        decrypt: true,
+      );
+    }
+    if (outcome != null) _afterUnlock(outcome, open: false);
+  }
+
   static String _stateWord(ProtectedItem item) => switch (item.method) {
-    ProtectionMethod.encrypt => 'locked',
+    ProtectionMethod.encrypt || ProtectionMethod.drive => 'locked',
     ProtectionMethod.blockAccess => 'blocked',
     ProtectionMethod.readOnly => 'read-only',
     ProtectionMethod.none => 'hidden',
@@ -176,7 +225,7 @@ class ItemActions {
     final confirmed = await showConfirmDialog(
       _context,
       title: 'Remove “${item.name}” from the list?',
-      message: item.isProtected
+      message: item.isProtected || item.hasVault
           ? 'Its files can no longer be found, so nothing will be changed on '
                 'disk.'
           : 'The item stays where it is, unlocked. You can protect it again '
@@ -193,14 +242,20 @@ class ItemActions {
     });
   }
 
-  /// A vault was opened from Explorer.
+  /// A vault was opened from Explorer (for a drive vault, its
+  /// `vault.flk`).
   Future<void> openVault(String vaultPath) async {
+    vaultPath = DriveVault.folderOf(vaultPath);
     if (!FsUtils.exists(vaultPath)) {
       showToast('That vault no longer exists.', tone: Tone.warning);
       return;
     }
     final item = _ref.read(itemsControllerProvider.notifier).byPath(vaultPath);
-    if (item != null && item.isEncryptedNow) {
+    if (item != null && item.isMounted) {
+      await reveal(item);
+      return;
+    }
+    if (item != null && item.hasVault && item.isProtected) {
       // Explorer requests always ask for the password.
       if (!_context.mounted) return;
       final outcome = await showUnlockDialog(
@@ -217,20 +272,38 @@ class ItemActions {
   }
 
   Future<void> reveal(ProtectedItem item) async {
-    if (!await ShellActions.reveal(item.currentPath)) {
+    if (!await ShellActions.reveal(_location(item))) {
       showToast('Explorer could not be opened.', tone: Tone.warning);
     }
   }
 
   Future<void> copyLocation(ProtectedItem item) async {
-    await Clipboard.setData(ClipboardData(text: item.currentPath));
+    await Clipboard.setData(ClipboardData(text: _location(item)));
     showToast('Location copied.');
   }
+
+  /// Where the item's files are: its drive while it is open.
+  static String _location(ProtectedItem item) =>
+      item.isMounted ? item.mountPoint! : item.currentPath;
 
   // -------------------------------------------------------------------------
 
   void _afterUnlock(UnlockOutcome outcome, {required bool open}) {
     final item = outcome.item;
+    if (item.isMounted) {
+      final drive = item.mountPoint!;
+      if (open) unawaited(ShellActions.reveal(drive));
+      showToast(
+        '“${item.name}” is open as drive '
+        '${drive.endsWith(r'\') ? drive.substring(0, drive.length - 1) : drive}. '
+        'Lock it when you are done.',
+        tone: Tone.success,
+        icon: Icons.storage_rounded,
+        actionLabel: open ? null : 'Open',
+        onAction: open ? null : () => unawaited(ShellActions.reveal(drive)),
+      );
+      return;
+    }
     if (open) unawaited(ShellActions.reveal(item.itemPath));
     final renamed = outcome.renamed
         ? ' Something already existed at the original location, so it was '
@@ -250,9 +323,11 @@ class ItemActions {
   void _toastProtected(ProtectedItem item) {
     final hidden = item.hide ? ' and hidden' : '';
     final message = switch (item.method) {
-      ProtectionMethod.encrypt when item.hide =>
+      ProtectionMethod.encrypt || ProtectionMethod.drive when item.hide =>
         '“${item.name}” is encrypted and hidden.',
       ProtectionMethod.encrypt => '“${item.name}” is locked.',
+      ProtectionMethod.drive =>
+        '“${item.name}” is locked. Open it here as a drive when you need it.',
       ProtectionMethod.blockAccess => '“${item.name}” is blocked$hidden.',
       ProtectionMethod.readOnly => '“${item.name}” is read-only$hidden.',
       ProtectionMethod.none => '“${item.name}” is hidden.',
@@ -261,7 +336,8 @@ class ItemActions {
       message,
       tone: Tone.success,
       icon: switch (item.method) {
-        ProtectionMethod.encrypt => Icons.lock_rounded,
+        ProtectionMethod.encrypt ||
+        ProtectionMethod.drive => Icons.lock_rounded,
         ProtectionMethod.blockAccess => Icons.block_rounded,
         ProtectionMethod.readOnly => Icons.edit_off_rounded,
         ProtectionMethod.none => Icons.visibility_off_rounded,

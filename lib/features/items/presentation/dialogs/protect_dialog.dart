@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -11,7 +13,10 @@ import '../../../../core/widgets/cards.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/icon_tile.dart';
 import '../../../../core/widgets/new_password_fields.dart';
+import '../../../../engine/drive/drive_service.dart';
+import '../../../../engine/vault/drive_vault.dart';
 import '../../../../platform/access_control.dart';
+import '../../../../platform/shell_actions.dart';
 import '../../domain/protected_item.dart';
 
 /// What the user chose in the protect dialog.
@@ -32,16 +37,22 @@ class ProtectChoice {
 }
 
 /// Asks how to protect a new item. [accessProblem] explains why Block
-/// access and Read-only can't be used for it (`null` if they can).
+/// access and Read-only can't be used for it (`null` if they can), and
+/// [driveStatus] whether a folder can become a drive.
 Future<ProtectChoice?> showProtectDialog(
   BuildContext context, {
   required String path,
   required ItemKind kind,
   AccessProblem? accessProblem,
+  Future<DokanyStatus>? driveStatus,
 }) => showDialog<ProtectChoice>(
   context: context,
-  builder: (_) =>
-      _ProtectDialog(path: path, kind: kind, accessProblem: accessProblem),
+  builder: (_) => _ProtectDialog(
+    path: path,
+    kind: kind,
+    accessProblem: accessProblem,
+    driveStatus: driveStatus,
+  ),
 );
 
 /// Asks for the password of a custom-password item before locking it again.
@@ -60,11 +71,15 @@ class _ProtectDialog extends StatefulWidget {
     required this.kind,
     this.relock,
     this.accessProblem,
+    this.driveStatus,
   });
 
   final String path;
   final ItemKind kind;
   final AccessProblem? accessProblem;
+
+  /// Fails when drives can't be made at all (the helper is missing).
+  final Future<DokanyStatus>? driveStatus;
 
   /// Set when locking an existing custom-password item again.
   final ProtectedItem? relock;
@@ -80,9 +95,14 @@ class _ProtectDialogState extends State<_ProtectDialog> {
   late PasswordMode _mode = widget.relock?.passwordMode ?? PasswordMode.master;
   final _form = NewPasswordController();
 
+  /// Whether an encrypted folder opens as a drive (remembered while
+  /// another method is selected).
+  late bool _asDrive = widget.relock?.method == ProtectionMethod.drive;
+
   bool get _isRelock => widget.relock != null;
   String get _name => p.basename(widget.path);
-  bool get _encrypt => _method == ProtectionMethod.encrypt;
+  bool get _encrypt => _method.encrypts;
+  bool get _isFolder => widget.kind == ItemKind.folder;
 
   /// "Hide only" means hiding is the whole protection.
   bool get _hidden => _hide || _method == ProtectionMethod.none;
@@ -100,14 +120,15 @@ class _ProtectDialogState extends State<_ProtectDialog> {
   }
 
   String get _actionLabel => switch (_method) {
-    ProtectionMethod.encrypt => _hide ? 'Lock and hide' : 'Lock',
+    ProtectionMethod.encrypt ||
+    ProtectionMethod.drive => _hide ? 'Lock and hide' : 'Lock',
     ProtectionMethod.blockAccess => _hide ? 'Block and hide' : 'Block',
     ProtectionMethod.readOnly => 'Make read-only',
     ProtectionMethod.none => 'Hide',
   };
 
   IconData get _actionIcon => switch (_method) {
-    ProtectionMethod.encrypt => Icons.lock_rounded,
+    ProtectionMethod.encrypt || ProtectionMethod.drive => Icons.lock_rounded,
     ProtectionMethod.blockAccess => Icons.block_rounded,
     ProtectionMethod.readOnly => Icons.edit_off_rounded,
     ProtectionMethod.none => Icons.visibility_off_rounded,
@@ -115,8 +136,13 @@ class _ProtectDialogState extends State<_ProtectDialog> {
 
   String get _outcome {
     final vaultName = '$_name${AppInfo.vaultExtension}';
+    final driveName = '$_name${DriveVault.extension}';
     final hidden = _hide ? ' and hidden from Explorer' : '';
     return switch (_method) {
+      ProtectionMethod.drive =>
+        '“$_name” becomes an encrypted vault folder ($driveName)$hidden. '
+            'Open it from this app: it shows up as a drive (like V:), and '
+            'its files are never decrypted to the disk.',
       ProtectionMethod.encrypt when _hide =>
         '“$_name” becomes an encrypted vault ($vaultName) and is hidden '
             'from Explorer. Unlock it from this app.',
@@ -151,7 +177,7 @@ class _ProtectDialogState extends State<_ProtectDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isFolder = widget.kind == ItemKind.folder;
+    final isFolder = _isFolder;
     return AppDialog(
       icon: Icons.lock_rounded,
       title: _isRelock ? 'Lock “$_name” again' : 'Protect “$_name”',
@@ -167,6 +193,26 @@ class _ProtectDialogState extends State<_ProtectDialog> {
             const SizedBox(height: AppSpacing.xl),
             const _Label('Protection'),
             ..._methodOptions(),
+            AnimatedSize(
+              duration: AppMotion.normal,
+              curve: AppMotion.curve,
+              alignment: Alignment.topCenter,
+              child: _encrypt && _isFolder
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.lg),
+                      child: _OpenAsChoice(
+                        asDrive: _asDrive,
+                        status: widget.driveStatus,
+                        onChanged: (asDrive) => setState(() {
+                          _asDrive = asDrive;
+                          _method = asDrive
+                              ? ProtectionMethod.drive
+                              : ProtectionMethod.encrypt;
+                        }),
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
             AnimatedSize(
               duration: AppMotion.normal,
               curve: AppMotion.curve,
@@ -222,15 +268,21 @@ class _ProtectDialogState extends State<_ProtectDialog> {
       Tone tone = Tone.primary,
     }) {
       final enabled = !method.usesAccessRule || problem == null;
+      // "Encrypt" covers both kinds of vault; the choice below it picks one.
+      final isEncrypt = method == ProtectionMethod.encrypt;
       return Expanded(
         child: ChoiceTile(
           icon: icon,
           tone: tone,
           title: title,
           subtitle: enabled ? subtitle : accessProblemShortText(problem),
-          selected: _method == method,
+          selected: isEncrypt ? _encrypt : _method == method,
           enabled: enabled,
-          onSelected: () => setState(() => _method = method),
+          onSelected: () => setState(
+            () => _method = isEncrypt && _asDrive && _isFolder
+                ? ProtectionMethod.drive
+                : method,
+          ),
         ),
       );
     }
@@ -329,6 +381,89 @@ class _ProtectDialogState extends State<_ProtectDialog> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// For encrypted folders: restore the folder when unlocked, or open it as
+/// a drive (needs Dokany).
+class _OpenAsChoice extends StatelessWidget {
+  const _OpenAsChoice({
+    required this.asDrive,
+    required this.status,
+    required this.onChanged,
+  });
+
+  final bool asDrive;
+  final Future<DokanyStatus>? status;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DokanyStatus>(
+      future: status,
+      builder: (context, snapshot) {
+        // Without the helper (or a status), drives can't be made at all.
+        final available = snapshot.hasData;
+        final dokany = snapshot.data;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _Label('Open it as'),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: [
+                const ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.folder_open_rounded, size: 18),
+                  label: Text('A folder'),
+                ),
+                ButtonSegment(
+                  value: true,
+                  enabled: available,
+                  icon: const Icon(Icons.storage_rounded, size: 18),
+                  label: const Text('A drive'),
+                ),
+              ],
+              selected: {asDrive && available},
+              onSelectionChanged: (value) => onChanged(value.first),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              asDrive && available
+                  ? 'It opens as a drive (like V:) while it is unlocked. '
+                        'Nothing is decrypted to the disk, so nothing can be '
+                        'recovered from it later.'
+                  : 'Unlocking decrypts it back into a normal folder, until '
+                        'you lock it again.',
+              style: context.text.bodySmall,
+            ),
+            if (snapshot.hasError) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Drives are not available: the drive helper is missing. '
+                'Reinstall ${AppInfo.name} to use them.',
+                style: context.text.bodySmall?.copyWith(
+                  color: context.palette.tone(Tone.warning).foreground,
+                ),
+              ),
+            ] else if (asDrive && dokany != null && !dokany.installed) ...[
+              const SizedBox(height: AppSpacing.md),
+              InfoBanner(
+                icon: Icons.download_rounded,
+                tone: Tone.warning,
+                message:
+                    'Opening drives needs Dokany, a free driver that Windows '
+                    'trusts. You can lock the folder now and install Dokany '
+                    'before you open it.',
+                actionLabel: 'Get Dokany',
+                onAction: () =>
+                    unawaited(ShellActions.openUrl(AppInfo.dokanyDownloadUrl)),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

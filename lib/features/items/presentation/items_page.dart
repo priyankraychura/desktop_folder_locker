@@ -193,6 +193,7 @@ class _ItemsPageState extends ConsumerState<ItemsPage> {
                         onReveal: () => _actions.reveal(item),
                         onCopyLocation: () => _actions.copyLocation(item),
                         onRemove: () => _actions.remove(item),
+                        onDecrypt: () => _actions.decrypt(item),
                       ),
                     );
                   },

@@ -39,8 +39,21 @@ class ItemsController extends AsyncNotifier<List<ProtectedItem>> {
     final outcomes = await Isolate.run(() => JournalRecovery.run(journal));
     if (outcomes.isNotEmpty) {
       items = _applyRecovery(items, outcomes);
-      await repository.save(items);
       ref.read(recoveryReportProvider.notifier).report(outcomes);
+    }
+    // Drives close with the app, so none is open at a start.
+    final closed = [
+      for (final item in items)
+        item.isMounted
+            ? item.copyWith(
+                status: ProtectionStatus.protected,
+                clearMountPoint: true,
+              )
+            : item,
+    ];
+    if (outcomes.isNotEmpty || items.any((item) => item.isMounted)) {
+      items = closed;
+      await repository.save(items);
     }
     return items;
   }
@@ -71,13 +84,11 @@ class ItemsController extends AsyncNotifier<List<ProtectedItem>> {
   /// Whether the item's current file or folder exists.
   bool existsOnDisk(ProtectedItem item) => FsUtils.exists(item.currentPath);
 
-  /// Vaults that are opened with the master password (for re-keying).
+  /// Vaults that are opened with the master password (for re-keying),
+  /// including drives, whose vault stays while they are open.
   List<ProtectedItem> masterPasswordVaults() => [
     for (final item in items)
-      if (item.isEncryptedNow &&
-          item.passwordMode == PasswordMode.master &&
-          item.vaultPath != null)
-        item,
+      if (item.hasVault && item.passwordMode == PasswordMode.master) item,
   ];
 
   Future<void> upsert(ProtectedItem item) async {
@@ -108,9 +119,16 @@ class ItemsController extends AsyncNotifier<List<ProtectedItem>> {
     ]);
   }
 
+  Future<void> _lastSave = Future.value();
+
+  /// Completes once every change so far is on the disk.
+  Future<void> get saved => _lastSave;
+
   Future<void> _save(List<ProtectedItem> next) async {
     state = AsyncData(next);
-    await ref.read(itemsRepositoryProvider).save(next);
+    final save = ref.read(itemsRepositoryProvider).save(next);
+    _lastSave = save.catchError((Object _) {});
+    await save;
   }
 
   static List<ProtectedItem> _applyRecovery(

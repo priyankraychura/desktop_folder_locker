@@ -1,9 +1,10 @@
 ; Inno Setup script for Folder Locker (https://jrsoftware.org/isinfo.php).
 ;
-; Build the app first, then compile this script:
+; Build the drive helper and the app first, then compile this script:
 ;
-;   flutter build windows --release
-;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.1.0 installer\folder_locker.iss
+;   cargo build --release -p folder-locker-drive     (in native\)
+;   flutter build windows --release                  (copies the helper)
+;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\folder_locker.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml).
@@ -23,7 +24,7 @@
 #define VaultIconId "102"
 
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.2.0"
 #endif
 
 [Setup]
@@ -90,6 +91,9 @@ Root: HKA; Subkey: "Software\Classes\*\shell\{#LockVerb}\command"; ValueType: st
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; Dokany is installed separately (it's a driver, and needs administrator
+; rights); it's only needed to open encrypted folders as drives.
+Filename: "https://github.com/dokan-dev/dokany/releases/latest"; Description: "Get Dokany (free), to open encrypted folders as drives"; Flags: postinstall shellexec nowait skipifsilent unchecked
 
 ; Settings, keys and journals in %APPDATA%\FolderLocker are kept on purpose:
 ; they are needed to find the user's items again after reinstalling.
@@ -101,6 +105,8 @@ begin
     'Your data stays safe after {#AppName} is removed:' + #13#10 + #13#10 +
     '- Locked items stay encrypted. Install {#AppName} again to open them ' +
     'with your password or recovery key.' + #13#10 +
+    '- Encrypted drives (folders ending in .flkd) stay encrypted too.' +
+    #13#10 +
     '- Blocked and read-only items stay protected. Unlock them first, or ' +
     'install {#AppName} again to unlock them.' + #13#10 +
     '- Unlocked items stay normal folders and files.' + #13#10 +

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -26,24 +26,32 @@ const UNMOUNT_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Loads Dokany's library, only from System32 (never from next to the
 /// helper), and starts it. The helper links it with delay loading, so it
-/// runs without Dokany, and this check comes before any Dokany call.
+/// runs without Dokany, and this check comes before any Dokany call. Until
+/// it succeeds, every call tries again: Dokany may be installed meanwhile.
 fn dokany_loaded() -> bool {
-    static LOADED: OnceLock<bool> = OnceLock::new();
-    *LOADED.get_or_init(|| {
-        let name = U16CString::from_str("dokan2.dll").expect("no NUL");
-        let module = unsafe {
-            LoadLibraryExW(
-                name.as_ptr(),
-                std::ptr::null_mut(),
-                LOAD_LIBRARY_SEARCH_SYSTEM32,
-            )
-        };
-        if module.is_null() {
-            return false;
-        }
-        dokan::init();
-        true
-    })
+    static LOADED: AtomicBool = AtomicBool::new(false);
+    static LOADING: Mutex<()> = Mutex::new(());
+    if LOADED.load(Ordering::Acquire) {
+        return true;
+    }
+    let _loading = lock(&LOADING);
+    if LOADED.load(Ordering::Acquire) {
+        return true;
+    }
+    let name = U16CString::from_str("dokan2.dll").expect("no NUL");
+    let module = unsafe {
+        LoadLibraryExW(
+            name.as_ptr(),
+            std::ptr::null_mut(),
+            LOAD_LIBRARY_SEARCH_SYSTEM32,
+        )
+    };
+    if module.is_null() {
+        return false;
+    }
+    dokan::init();
+    LOADED.store(true, Ordering::Release);
+    true
 }
 
 pub fn dokany_status() -> Value {

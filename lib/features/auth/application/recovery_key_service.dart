@@ -66,7 +66,7 @@ class RecoveryKeyService {
       final protection = _ref.read(protectionControllerProvider.notifier);
       final vaults = [
         for (final item in _ref.read(itemsControllerProvider.notifier).items)
-          if (item.isEncryptedNow && item.vaultPath != null) item,
+          if (item.hasVault) item,
       ];
       final outcomes = await _ref
           .read(engineRunnerProvider)

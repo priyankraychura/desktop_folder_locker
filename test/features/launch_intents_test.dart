@@ -24,6 +24,14 @@ void main() {
         LaunchIntent.parse(['--lock', r'C:\Docs\Secret.FLK']),
         isA<OpenVaultIntent>(),
       );
+      expect(
+        LaunchIntent.parse(['--lock', r'C:\Docs\Photos.flkd']),
+        isA<OpenVaultIntent>(),
+      );
+      expect(
+        LaunchIntent.parse(['--open', r'C:\Docs\Photos.flkd\vault.flk']),
+        isA<OpenVaultIntent>(),
+      );
     });
 
     test('ignores unknown or incomplete arguments', () {

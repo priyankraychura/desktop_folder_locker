@@ -20,6 +20,11 @@ enum ProtectionMethod {
   /// Encrypted into a vault file in the same place (`Name.flk`).
   encrypt,
 
+  /// Encrypted into a drive vault in the same place (`Name.flkd`), which
+  /// opens as a drive (`V:`) without writing its files to the disk.
+  /// Folders only.
+  drive,
+
   /// A Windows permission rule stops anyone from opening, changing or
   /// deleting it.
   blockAccess,
@@ -33,6 +38,10 @@ enum ProtectionMethod {
 
   /// Whether the method uses a Windows permission rule.
   bool get usesAccessRule => this == blockAccess || this == readOnly;
+
+  /// Whether the contents are encrypted, so opening needs a password (or
+  /// the key the app already has).
+  bool get encrypts => this == encrypt || this == drive;
 }
 
 /// A file or folder managed by the app.
@@ -54,6 +63,7 @@ class ProtectedItem {
     this.fileCount,
     this.needsPassword = false,
     this.unlockedAt,
+    this.mountPoint,
   });
 
   factory ProtectedItem.fromJson(Map<String, Object?> json) => ProtectedItem(
@@ -76,6 +86,7 @@ class ProtectedItem {
     fileCount: json['fileCount'] as int?,
     needsPassword: json['needsPassword'] as bool? ?? false,
     unlockedAt: DateTime.tryParse(json['unlockedAt'] as String? ?? ''),
+    mountPoint: json['mountPoint'] as String?,
     addedAt: DateTime.parse(json['addedAt']! as String),
     updatedAt: DateTime.parse(json['updatedAt']! as String),
   );
@@ -89,7 +100,9 @@ class ProtectedItem {
   /// Where the item lives while it is unprotected (its original location).
   final String itemPath;
 
-  /// The vault file, while an encrypted item is protected.
+  /// The vault file (or drive vault folder) while it exists: while an
+  /// encrypted item is protected, and while a drive item is locked or open
+  /// as a drive.
   final String? vaultPath;
   final ProtectionMethod method;
   final bool hide;
@@ -107,15 +120,27 @@ class ProtectedItem {
   /// When the item was last unlocked (`null` while it is protected). Used
   /// for reminders and to lock it again automatically.
   final DateTime? unlockedAt;
+
+  /// Where a drive item is open (for example `V:\`), while it is.
+  final String? mountPoint;
   final DateTime addedAt;
   final DateTime updatedAt;
 
   bool get isProtected => status == ProtectionStatus.protected;
   bool get encrypt => method == ProtectionMethod.encrypt;
   bool get isEncryptedNow => encrypt && isProtected;
+  bool get isDrive => method == ProtectionMethod.drive;
+
+  /// Whether the item is open as a drive right now.
+  bool get isMounted => isDrive && !isProtected && mountPoint != null;
+
+  /// Whether an encrypted vault of the item exists (and has key slots to
+  /// update when a password or the recovery key changes).
+  bool get hasVault =>
+      vaultPath != null && (isDrive || (encrypt && isProtected));
 
   /// The path that exists on disk right now.
-  String get currentPath => isEncryptedNow ? vaultPath ?? itemPath : itemPath;
+  String get currentPath => hasVault ? vaultPath! : itemPath;
 
   ProtectedItem copyWith({
     String? name,
@@ -132,6 +157,8 @@ class ProtectedItem {
     int? fileCount,
     bool? needsPassword,
     DateTime? unlockedAt,
+    String? mountPoint,
+    bool clearMountPoint = false,
   }) => ProtectedItem(
     id: id,
     name: name ?? this.name,
@@ -149,6 +176,11 @@ class ProtectedItem {
     // Only kept while the item stays unlocked.
     unlockedAt: (status ?? this.status) == ProtectionStatus.unprotected
         ? unlockedAt ?? this.unlockedAt
+        : null,
+    mountPoint:
+        (status ?? this.status) == ProtectionStatus.unprotected &&
+            !clearMountPoint
+        ? mountPoint ?? this.mountPoint
         : null,
     addedAt: addedAt,
     updatedAt: DateTime.now(),
@@ -169,6 +201,7 @@ class ProtectedItem {
     'fileCount': fileCount,
     'needsPassword': needsPassword,
     'unlockedAt': unlockedAt?.toUtc().toIso8601String(),
+    'mountPoint': mountPoint,
     'addedAt': addedAt.toUtc().toIso8601String(),
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };

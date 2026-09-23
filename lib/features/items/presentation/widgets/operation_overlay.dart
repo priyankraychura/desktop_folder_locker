@@ -61,6 +61,7 @@ class _ProgressCard extends StatelessWidget {
   String get _title => switch (operation.kind) {
     OperationKind.locking => 'Locking “${operation.itemName}”',
     OperationKind.unlocking => 'Unlocking “${operation.itemName}”',
+    OperationKind.opening => 'Opening “${operation.itemName}” as a drive',
   };
 
   String _phase(OperationPhase? phase) => switch (phase) {

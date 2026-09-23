@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../engine/crypto/crypto_service.dart';
 import '../../engine/crypto/kdf_params.dart';
+import '../../engine/drive/drive_helper.dart';
+import '../../engine/drive/drive_service.dart';
 import '../../engine/engine_runner.dart';
 import '../../platform/access_control.dart';
 import '../../platform/system_tray.dart';
@@ -52,3 +54,18 @@ final accessRulesProvider = Provider<AccessRules>(
 /// The notification-area icon. Overridden with the native one on Windows
 /// in `bootstrap()`.
 final systemTrayProvider = Provider<SystemTray>((ref) => const NoSystemTray());
+
+/// The drive helper, which encrypts folders into drive vaults and opens
+/// them as drives. It starts on first use and stops with the app (which
+/// closes every drive). Tests use a fake.
+final driveServiceProvider = Provider<DriveService>((ref) {
+  final service = HelperDriveService(HelperDriveService.defaultExecutable());
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+/// Whether vaults can open as drives (Dokany is installed). Fails when the
+/// drive helper is missing. Invalidate it to check again.
+final dokanyStatusProvider = FutureProvider<DokanyStatus>(
+  (ref) => ref.watch(driveServiceProvider).status(),
+);

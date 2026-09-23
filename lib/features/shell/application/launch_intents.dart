@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_info.dart';
+import '../../../engine/vault/drive_vault.dart';
 
 /// Something Explorer asked the app to do through command-line arguments.
 sealed class LaunchIntent {
@@ -17,8 +18,9 @@ sealed class LaunchIntent {
         case '--open':
           return OpenVaultIntent(path);
         case '--lock':
-          // "Lock with…" on a vault file means "unlock it".
-          return path.toLowerCase().endsWith(AppInfo.vaultExtension)
+          // "Lock with…" on a vault means "unlock it".
+          return path.toLowerCase().endsWith(AppInfo.vaultExtension) ||
+                  DriveVault.isDrivePath(path)
               ? OpenVaultIntent(path)
               : LockPathIntent(path);
       }

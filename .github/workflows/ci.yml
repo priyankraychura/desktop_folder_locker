@@ -38,10 +38,6 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
-      # The first run also compiles libsodium from source (build hook).
-      - name: Test
-        run: flutter test
-
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: native
@@ -54,10 +50,15 @@ jobs:
         working-directory: native
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      # The vault core, the helper's protocol, import and export.
+      # The vault core, the helper's protocol, import and export. Also
+      # builds the helper that the app's tests below talk to.
       - name: Test Rust
         working-directory: native
         run: cargo test --workspace
+
+      # The first run also compiles libsodium from source (build hook).
+      - name: Test
+        run: flutter test
 
   windows:
     name: Test and build (Windows)
@@ -75,14 +76,6 @@ jobs:
       - name: Get packages
         run: flutter pub get
 
-      # Also exercises the Windows code paths of the engine: NTFS renames,
-      # file attributes and free-space checks through FFI.
-      - name: Test
-        run: flutter test
-
-      - name: Build app
-        run: flutter build windows --release
-
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: native
@@ -94,6 +87,15 @@ jobs:
         run: |
           cargo clippy --workspace --all-targets -- -D warnings
           cargo build --release -p folder-locker-drive
+
+      # Also exercises the Windows code paths of the engine (NTFS renames,
+      # file attributes and free-space checks through FFI) and the app
+      # talking to the drive helper built above.
+      - name: Test
+        run: flutter test
+
+      - name: Build app
+        run: flutter build windows --release
 
       # Flutter apps need the Visual C++ runtime. Shipping these three DLLs
       # next to the exe (as the Flutter docs suggest) means users don't have

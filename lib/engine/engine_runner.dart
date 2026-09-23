@@ -14,6 +14,7 @@ import 'operations/operation_progress.dart';
 import 'operations/rekey_operation.dart';
 import 'operations/reseal_operation.dart';
 import 'operations/unlock_operation.dart';
+import 'vault/drive_vault.dart';
 import 'vault/vault_keys.dart';
 
 /// A job running in a background isolate.
@@ -101,6 +102,23 @@ class EngineRunner {
         (r) => r.result.withDerivedKey(_materialize(r.derivedKey)),
       ),
       job.cancel,
+    );
+  }
+
+  /// Opens the data key of the drive vault at [vaultPath]. The caller owns
+  /// the returned keys (the data key, and the derived key when a typed
+  /// password opened it).
+  Future<UnlockedKey> openDriveKey(
+    String vaultPath,
+    VaultCredential credential,
+  ) async {
+    final opened = await _start(
+      _OpenDriveKeySpec(vaultPath, _credentialToTransfer(credential)),
+    ).result;
+    return UnlockedKey(
+      dataKey: _crypto.fromTransferrable(opened.dataKey),
+      openedWith: opened.openedWith,
+      derivedKey: _materialize(opened.derivedKey),
     );
   }
 
@@ -247,6 +265,14 @@ class _TransferCredential {
   final KeySlotType? slotType;
 }
 
+class _OpenedKeyTransfer {
+  const _OpenedKeyTransfer(this.dataKey, this.openedWith, this.derivedKey);
+
+  final TransferrableSecureKey dataKey;
+  final KeySlotType openedWith;
+  final _TransferKey? derivedKey;
+}
+
 class _UnlockTransferResult {
   const _UnlockTransferResult(this.result, this.derivedKey);
 
@@ -368,6 +394,38 @@ final class _UnlockSpec extends _JobSpec<_UnlockTransferResult> {
       final transferred = context.transfer(result.derivedKey);
       result.derivedKey?.dispose();
       return _UnlockTransferResult(result.withDerivedKey(null), transferred);
+    } finally {
+      if (credential is DerivedKeyCredential) credential.key.dispose();
+    }
+  }
+}
+
+final class _OpenDriveKeySpec extends _JobSpec<_OpenedKeyTransfer> {
+  const _OpenDriveKeySpec(this.vaultPath, this.credential);
+
+  final String vaultPath;
+  final _TransferCredential credential;
+
+  @override
+  _OpenedKeyTransfer run(_WorkerContext context) {
+    final credential = context.credential(this.credential);
+    try {
+      final unlocked = DriveVault.openKey(
+        crypto: context.crypto,
+        path: vaultPath,
+        credential: credential,
+      );
+      // Transferring copies the keys; the worker's own copies are wiped.
+      try {
+        return _OpenedKeyTransfer(
+          context.crypto.toTransferrable(unlocked.dataKey),
+          unlocked.openedWith,
+          context.transfer(unlocked.derivedKey),
+        );
+      } finally {
+        unlocked.dataKey.dispose();
+        unlocked.derivedKey?.dispose();
+      }
     } finally {
       if (credential is DerivedKeyCredential) credential.key.dispose();
     }

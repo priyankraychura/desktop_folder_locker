@@ -5,12 +5,15 @@ import 'package:path/path.dart' as p;
 import '../../../core/constants/app_info.dart';
 import '../../../core/di/core_providers.dart';
 import '../../../engine/crypto/kdf_params.dart';
+import '../../../engine/drive/drive_operations.dart';
+import '../../../engine/drive/drive_service.dart';
 import '../../../engine/engine_exception.dart';
 import '../../../engine/engine_runner.dart';
 import '../../../engine/format/key_slot.dart';
 import '../../../engine/operations/lock_operation.dart';
 import '../../../engine/operations/operation_progress.dart';
 import '../../../engine/operations/unlock_operation.dart';
+import '../../../engine/vault/drive_vault.dart';
 import '../../../engine/vault/fs_utils.dart';
 import '../../../engine/vault/vault_keys.dart';
 import '../../../platform/access_control.dart';
@@ -22,7 +25,13 @@ import 'item_key_cache.dart';
 import 'items_controller.dart';
 import 'path_guard.dart';
 
-enum OperationKind { locking, unlocking }
+enum OperationKind {
+  locking,
+  unlocking,
+
+  /// Opening a vault as a drive.
+  opening,
+}
 
 /// The operation currently running, shown by the progress overlay.
 @immutable
@@ -84,6 +93,9 @@ enum ProtectionIssue {
 
   /// Adding or removing a Windows permission rule failed.
   accessRuleFailed,
+
+  /// Only folders can become drives.
+  driveNeedsFolder,
 }
 
 class ProtectionException implements Exception {
@@ -119,7 +131,14 @@ final protectionControllerProvider =
 /// operation (with progress) as its state.
 class ProtectionController extends Notifier<ActiveOperation?> {
   @override
-  ActiveOperation? build() => null;
+  ActiveOperation? build() {
+    final closed = ref
+        .read(driveServiceProvider)
+        .unmounted
+        .listen(_driveClosed);
+    ref.onDispose(closed.cancel);
+    return null;
+  }
 
   ItemsController get _items => ref.read(itemsControllerProvider.notifier);
   ItemKeyCache get _cache => ref.read(itemKeyCacheProvider);
@@ -127,6 +146,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
   EngineRunner get _runner => ref.read(engineRunnerProvider);
   String get _journalDir => ref.read(appPathsProvider).journalDir;
   AccessRules get _rules => ref.read(accessRulesProvider);
+  DriveService get _drives => ref.read(driveServiceProvider);
 
   PathGuard get _guard => PathGuard(
     appDataDir: ref.read(appPathsProvider).root,
@@ -158,7 +178,8 @@ class ProtectionController extends Notifier<ActiveOperation?> {
   }
 
   LockRequirement lockRequirement(ProtectedItem item) {
-    if (!item.encrypt) return LockRequirement.none;
+    // Closing a drive needs no key.
+    if (!item.method.encrypts || item.isMounted) return LockRequirement.none;
     final cached = _cache[item.id]?.slotType;
     return switch (item.passwordMode) {
       PasswordMode.master =>
@@ -183,10 +204,14 @@ class ProtectionController extends Notifier<ActiveOperation?> {
         pathProblem: problem,
       );
     }
-    if (request.method == ProtectionMethod.encrypt &&
+    if (request.method.encrypts &&
         request.passwordMode == PasswordMode.master &&
         !_session.isUnlocked) {
       throw const ProtectionException(ProtectionIssue.appLocked);
+    }
+    if (request.method == ProtectionMethod.drive &&
+        !FsUtils.isDirectory(path)) {
+      throw const ProtectionException(ProtectionIssue.driveNeedsFolder);
     }
 
     final now = DateTime.now();
@@ -216,13 +241,15 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     }
   }
 
-  /// Applies an item's protection again after it was unlocked.
+  /// Applies an item's protection again after it was unlocked (for a
+  /// drive: closes the drive).
   Future<ProtectedItem> lockAgain(
     ProtectedItem item, {
     String? customPassword,
     String? passwordHint,
   }) {
     _ensureIdle();
+    if (item.isMounted) return _unmount(item);
     final next = passwordHint == null
         ? item
         : item.copyWith(
@@ -232,8 +259,8 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     return _protect(next, customPassword: customPassword);
   }
 
-  /// Unlocks an item: decrypts it, removes its permission rule and/or
-  /// shows it again.
+  /// Unlocks an item: decrypts it, opens it as a drive, removes its
+  /// permission rule and/or shows it again.
   ///
   /// Without a [credential], the session key is used; if there is none,
   /// throws [ProtectionIssue.passwordRequired] so the UI can ask.
@@ -245,11 +272,151 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     if (!item.isProtected) return UnlockOutcome(item, renamed: false);
     return switch (item.method) {
       ProtectionMethod.encrypt => _decrypt(item, credential),
+      ProtectionMethod.drive => _mount(item, credential),
       ProtectionMethod.blockAccess ||
       ProtectionMethod.readOnly => _removeRule(item),
       ProtectionMethod.none => _show(item),
     };
   }
+
+  /// Turns a drive item back into a normal folder (decrypted on the disk),
+  /// and deletes its vault. It can be locked again later.
+  Future<UnlockOutcome> decryptDrive(
+    ProtectedItem item, {
+    VaultCredential? credential,
+  }) async {
+    _ensureIdle();
+    final vaultPath = item.vaultPath;
+    if (!item.isDrive || vaultPath == null || !FsUtils.isDirectory(vaultPath)) {
+      throw const ProtectionException(ProtectionIssue.notFound);
+    }
+    final key =
+        credential ??
+        sessionCredential(item) ??
+        (throw const ProtectionException(ProtectionIssue.passwordRequired));
+
+    state = ActiveOperation(kind: OperationKind.unlocking, itemName: item.name);
+    try {
+      // The password is checked before an open drive is closed.
+      final opened = await _runner.openDriveKey(vaultPath, key);
+      final DriveExportResult result;
+      try {
+        if (opened.derivedKey case final derived?) {
+          _cache.put(item.id, derived, opened.openedWith);
+        }
+        if (item.isMounted) {
+          await _drives.unmount(vaultPath);
+          await _items.upsert(
+            item.copyWith(
+              status: ProtectionStatus.protected,
+              clearMountPoint: true,
+            ),
+          );
+        }
+        final cancel = DriveCancelToken();
+        state = state?.copyWith(cancel: cancel.cancel);
+        result = await _driveOperations.export(
+          operationId: _newId(),
+          vaultPath: vaultPath,
+          folderPath: item.itemPath,
+          journalDir: _journalDir,
+          dataKey: opened.dataKey,
+          tag: item.id,
+          onProgress: (progress) => state = state?.copyWith(progress: progress),
+          cancel: cancel,
+        );
+      } finally {
+        opened.dataKey.dispose();
+      }
+      final updated = (_items.byId(item.id) ?? item).copyWith(
+        status: ProtectionStatus.unprotected,
+        itemPath: result.folderPath,
+        clearVaultPath: true,
+        clearMountPoint: true,
+        needsPassword: false,
+        sizeBytes: result.stats.bytes,
+        fileCount: result.stats.files,
+        unlockedAt: DateTime.now(),
+      );
+      await _items.upsert(updated);
+      ShellActions.notifyChanged(vaultPath);
+      ShellActions.notifyChanged(result.folderPath);
+      return UnlockOutcome(
+        updated,
+        renamed: !p.equals(result.folderPath, item.itemPath),
+      );
+    } finally {
+      state = null;
+    }
+  }
+
+  Future<UnlockOutcome> _mount(
+    ProtectedItem item,
+    VaultCredential? credential,
+  ) async {
+    final vaultPath = item.vaultPath;
+    if (vaultPath == null || !FsUtils.isDirectory(vaultPath)) {
+      throw const ProtectionException(ProtectionIssue.notFound);
+    }
+    final key =
+        credential ??
+        sessionCredential(item) ??
+        (throw const ProtectionException(ProtectionIssue.passwordRequired));
+
+    state = ActiveOperation(kind: OperationKind.opening, itemName: item.name);
+    try {
+      final opened = await _runner.openDriveKey(vaultPath, key);
+      if (opened.derivedKey case final derived?) {
+        _cache.put(item.id, derived, opened.openedWith);
+      }
+      final DriveMount mount;
+      try {
+        mount = await _drives.mount(
+          vault: vaultPath,
+          key: opened.dataKey,
+          label: item.name,
+        );
+      } finally {
+        opened.dataKey.dispose();
+      }
+      final updated = (_items.byId(item.id) ?? item).copyWith(
+        status: ProtectionStatus.unprotected,
+        mountPoint: mount.mountPoint,
+        unlockedAt: DateTime.now(),
+      );
+      await _items.upsert(updated);
+      return UnlockOutcome(updated, renamed: false);
+    } finally {
+      state = null;
+    }
+  }
+
+  Future<ProtectedItem> _unmount(ProtectedItem item) async {
+    state = ActiveOperation(kind: OperationKind.locking, itemName: item.name);
+    try {
+      await _drives.unmount(item.vaultPath!);
+      final updated = (_items.byId(item.id) ?? item).copyWith(
+        status: ProtectionStatus.protected,
+        clearMountPoint: true,
+      );
+      await _items.upsert(updated);
+      return updated;
+    } finally {
+      state = null;
+    }
+  }
+
+  /// A drive closed by itself (ejected in Explorer, or the helper stopped).
+  Future<void> _driveClosed(String vaultPath) async {
+    final item = _items.byPath(vaultPath);
+    if (item == null || !item.isMounted) return;
+    await _items.upsert(
+      item.copyWith(status: ProtectionStatus.protected, clearMountPoint: true),
+    );
+  }
+
+  DriveOperations get _driveOperations =>
+      DriveOperations(crypto: ref.read(cryptoProvider), drives: _drives);
 
   Future<UnlockOutcome> _decrypt(
     ProtectedItem item,
@@ -342,6 +509,8 @@ class ProtectionController extends Notifier<ActiveOperation?> {
   ) async {
     _ensureIdle();
     final now = DateTime.now();
+    final isDrive = DriveVault.isDrivePath(vaultPath);
+    if (isDrive) vaultPath = DriveVault.folderOf(vaultPath);
     final name = p.basenameWithoutExtension(vaultPath);
     final placeholder = ProtectedItem(
       id: _newId(),
@@ -349,7 +518,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
       kind: ItemKind.folder,
       itemPath: p.join(p.dirname(vaultPath), name),
       vaultPath: vaultPath,
-      method: ProtectionMethod.encrypt,
+      method: isDrive ? ProtectionMethod.drive : ProtectionMethod.encrypt,
       hide: false,
       passwordMode: PasswordMode.custom,
       status: ProtectionStatus.protected,
@@ -366,7 +535,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
           cached.slotType == KeySlotType.masterPassword &&
           keystoreSalt != null &&
           listEquals(cached.key.kdf.salt, keystoreSalt);
-      final restoredKind = FsUtils.isDirectory(outcome.item.itemPath)
+      final restoredKind = isDrive || FsUtils.isDirectory(outcome.item.itemPath)
           ? ItemKind.folder
           : ItemKind.file;
       final adopted = ProtectedItem(
@@ -374,13 +543,15 @@ class ProtectionController extends Notifier<ActiveOperation?> {
         name: p.basename(outcome.item.itemPath),
         kind: restoredKind,
         itemPath: outcome.item.itemPath,
-        method: ProtectionMethod.encrypt,
+        vaultPath: isDrive ? vaultPath : null,
+        method: placeholder.method,
         hide: false,
         passwordMode: isOurMaster ? PasswordMode.master : PasswordMode.custom,
         status: ProtectionStatus.unprotected,
         sizeBytes: outcome.item.sizeBytes,
         fileCount: outcome.item.fileCount,
         unlockedAt: outcome.item.unlockedAt,
+        mountPoint: outcome.item.mountPoint,
         addedAt: now,
         updatedAt: DateTime.now(),
       );
@@ -422,9 +593,11 @@ class ProtectionController extends Notifier<ActiveOperation?> {
   }
 
   /// Stops managing an item. Only allowed once it is unlocked (or its
-  /// files are gone), so nothing stays encrypted without being listed.
+  /// files are gone), so nothing stays encrypted without being listed. A
+  /// drive item must be decrypted to a folder first.
   Future<void> remove(ProtectedItem item) async {
-    if (item.isProtected && FsUtils.exists(item.currentPath)) {
+    if ((item.isProtected || item.hasVault) &&
+        FsUtils.exists(item.currentPath)) {
       throw const ProtectionException(ProtectionIssue.stillProtected);
     }
     _cache.remove(item.id);
@@ -446,6 +619,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     try {
       final updated = switch (item.method) {
         ProtectionMethod.encrypt => await _lockEncrypted(item, customPassword),
+        ProtectionMethod.drive => await _lockDrive(item, customPassword),
         ProtectionMethod.blockAccess ||
         ProtectionMethod.readOnly => await _applyRule(item),
         ProtectionMethod.none => _hide(item),
@@ -537,15 +711,11 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     }
   }
 
-  Future<ProtectedItem> _encrypt(
-    ProtectedItem item,
-    String? customPassword,
-  ) async {
+  /// The key slots for a new vault of [item], and a new custom key that
+  /// the caller remembers on success or disposes.
+  Future<({VaultSlotsSpec slots, DerivedKey? newCustomKey, bool current})>
+  _slotsFor(ProtectedItem item, String? customPassword) async {
     final recoveryPublicKey = _session.keystore?.recoveryPublicKey;
-    DerivedKey? newCustomKey;
-    final VaultSlotsSpec slots;
-    var usesCurrentMaster = true;
-
     switch (item.passwordMode) {
       case PasswordMode.master:
         final cached = _cache[item.id];
@@ -555,16 +725,19 @@ class ProtectionController extends Notifier<ActiveOperation?> {
                 ? cached!.key
                 : throw const ProtectionException(ProtectionIssue.appLocked));
         final currentSalt = _session.keystore?.kdf.salt;
-        usesCurrentMaster =
-            currentSalt != null && listEquals(masterKey.kdf.salt, currentSalt);
-        slots = VaultSlotsSpec(
-          master: masterKey,
-          recoveryPublicKey: recoveryPublicKey,
+        return (
+          slots: VaultSlotsSpec(
+            master: masterKey,
+            recoveryPublicKey: recoveryPublicKey,
+          ),
+          newCustomKey: null,
+          current:
+              currentSalt != null &&
+              listEquals(masterKey.kdf.salt, currentSalt),
         );
       case PasswordMode.custom:
-        final DerivedKey customKey;
         if (customPassword != null) {
-          newCustomKey = await _runner.deriveKey(
+          final key = await _runner.deriveKey(
             customPassword,
             ref
                 .read(kdfPolicyProvider)
@@ -572,19 +745,36 @@ class ProtectionController extends Notifier<ActiveOperation?> {
                   ref.read(cryptoProvider).randomBytes(KdfParams.saltLength),
                 ),
           );
-          customKey = newCustomKey;
-        } else if (_cache[item.id] case final cached?
-            when cached.slotType == KeySlotType.customPassword) {
-          customKey = cached.key;
-        } else {
-          throw const ProtectionException(ProtectionIssue.passwordRequired);
+          return (
+            slots: VaultSlotsSpec(
+              custom: key,
+              recoveryPublicKey: recoveryPublicKey,
+            ),
+            newCustomKey: key,
+            current: true,
+          );
         }
-        slots = VaultSlotsSpec(
-          custom: customKey,
-          recoveryPublicKey: recoveryPublicKey,
-        );
+        if (_cache[item.id] case final cached?
+            when cached.slotType == KeySlotType.customPassword) {
+          return (
+            slots: VaultSlotsSpec(
+              custom: cached.key,
+              recoveryPublicKey: recoveryPublicKey,
+            ),
+            newCustomKey: null,
+            current: true,
+          );
+        }
+        throw const ProtectionException(ProtectionIssue.passwordRequired);
     }
+  }
 
+  Future<ProtectedItem> _encrypt(
+    ProtectedItem item,
+    String? customPassword,
+  ) async {
+    final spec = await _slotsFor(item, customPassword);
+    var newCustomKey = spec.newCustomKey;
     try {
       final vaultPath = FsUtils.freePath(
         p.join(
@@ -601,7 +791,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
             journalDir: _journalDir,
             tag: item.id,
           ),
-          slots,
+          spec.slots,
         ),
       );
       if (newCustomKey != null) {
@@ -614,7 +804,52 @@ class ProtectionController extends Notifier<ActiveOperation?> {
         vaultPath: result.vaultPath,
         sizeBytes: result.totalBytes,
         fileCount: result.fileCount,
-        needsPassword: !usesCurrentMaster,
+        needsPassword: !spec.current,
+      );
+    } finally {
+      newCustomKey?.dispose();
+    }
+  }
+
+  Future<ProtectedItem> _lockDrive(
+    ProtectedItem item,
+    String? customPassword,
+  ) async {
+    final spec = await _slotsFor(item, customPassword);
+    var newCustomKey = spec.newCustomKey;
+    final cancel = DriveCancelToken();
+    state = state?.copyWith(cancel: cancel.cancel);
+    try {
+      final vaultPath = FsUtils.freePath(
+        p.join(
+          p.dirname(item.itemPath),
+          '${p.basename(item.itemPath)}${DriveVault.extension}',
+        ),
+      );
+      final result = await _driveOperations.lock(
+        operationId: _newId(),
+        folderPath: item.itemPath,
+        vaultPath: vaultPath,
+        journalDir: _journalDir,
+        slots: spec.slots,
+        tag: item.id,
+        onProgress: (progress) => state = state?.copyWith(progress: progress),
+        cancel: cancel,
+      );
+      if (newCustomKey != null) {
+        _cache.put(item.id, newCustomKey, KeySlotType.customPassword);
+        newCustomKey = null;
+      }
+      if (item.hide) _setHidden(result.vaultPath, hidden: true);
+      ShellActions.notifyChanged(result.vaultPath);
+      ShellActions.notifyChanged(item.itemPath);
+      return item.copyWith(
+        status: ProtectionStatus.protected,
+        vaultPath: result.vaultPath,
+        clearMountPoint: true,
+        sizeBytes: result.stats.bytes,
+        fileCount: result.stats.files,
+        needsPassword: !spec.current,
       );
     } finally {
       newCustomKey?.dispose();

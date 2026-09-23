@@ -1,7 +1,7 @@
 /// App-wide names and identifiers. Change the product name here only.
 abstract final class AppInfo {
   static const String name = 'Folder Locker';
-  static const String version = '1.1.0';
+  static const String version = '1.2.0';
   static const String tagline = 'Encrypt and hide your folders on Windows';
   static const String repositoryUrl =
       'https://github.com/priyankraychura/desktop_folder_locker';
@@ -18,4 +18,8 @@ abstract final class AppInfo {
 
   /// Resource id of the vault icon inside the executable (Runner.rc).
   static const int vaultIconResourceId = 102;
+
+  /// Where to get Dokany, which opens vaults as drives.
+  static const String dokanyDownloadUrl =
+      'https://github.com/dokan-dev/dokany/releases/latest';
 }

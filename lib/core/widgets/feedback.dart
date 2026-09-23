@@ -61,12 +61,18 @@ class InfoBanner extends StatelessWidget {
     this.tone = Tone.info,
     this.icon,
     this.title,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String message;
   final String? title;
   final Tone tone;
   final IconData? icon;
+
+  /// An optional button at the end, like "Get Dokany".
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +112,17 @@ class InfoBanner extends StatelessWidget {
               ],
             ),
           ),
+          if (actionLabel case final label?) ...[
+            const SizedBox(width: AppSpacing.sm),
+            TextButton(
+              onPressed: onAction,
+              style: TextButton.styleFrom(
+                foregroundColor: colors.foreground,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: Text(label),
+            ),
+          ],
         ],
       ),
     );

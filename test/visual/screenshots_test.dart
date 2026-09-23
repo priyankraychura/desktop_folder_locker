@@ -8,6 +8,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:desktop_folder_locker/engine/drive/drive_service.dart';
 import 'package:desktop_folder_locker/features/items/application/items_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
 import 'package:desktop_folder_locker/features/items/domain/protected_item.dart';
@@ -129,6 +130,15 @@ void main() {
         ),
       );
       await protection.unlock(project);
+      final contracts = await protection.protectNew(
+        ProtectRequest(
+          path: createFolder('Contracts', 30).path,
+          method: ProtectionMethod.drive,
+          hide: false,
+          passwordMode: PasswordMode.master,
+        ),
+      );
+      await protection.unlock(contracts);
     });
     await settleReal(tester);
     await capture('05_items');
@@ -141,6 +151,7 @@ void main() {
       context,
       path: newFolder.path,
       kind: ItemKind.folder,
+      driveStatus: Future.value(const DokanyStatus(installed: true)),
     ).ignore();
     await tester.pumpAndSettle();
     await capture('06_protect_dialog');
@@ -153,6 +164,12 @@ void main() {
     await tester.tap(find.text('Its own password'));
     await tester.pumpAndSettle();
     await capture('07_protect_dialog_custom');
+    await tester.tap(find.text('Master password'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('A drive'));
+    await tester.tap(find.text('A drive'));
+    await tester.pumpAndSettle();
+    await capture('07_protect_dialog_drive');
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 

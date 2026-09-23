@@ -106,3 +106,12 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# The drive helper (native/), when it has been built with
+# `cargo build --release` in native/: copied next to the app, where the app
+# looks for it. CI and the installer do the same with the release build.
+set(DRIVE_HELPER "${CMAKE_CURRENT_SOURCE_DIR}/../native/target/release/folder_locker_drive.exe")
+if(EXISTS "${DRIVE_HELPER}")
+  install(FILES "${DRIVE_HELPER}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()

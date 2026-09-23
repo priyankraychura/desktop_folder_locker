@@ -12,6 +12,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/cards.dart';
 import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../engine/drive/drive_service.dart';
 import '../../../platform/explorer_integration.dart';
 import '../../../platform/shell_actions.dart';
 import '../../auth/application/session_controller.dart';
@@ -54,6 +55,7 @@ class SettingsPage extends ConsumerWidget {
     final controller = ref.read(settingsControllerProvider.notifier);
     final keystore = ref.watch(sessionControllerProvider).keystore;
     final hasTray = ref.watch(systemTrayProvider).isAvailable;
+    final dokany = ref.watch(dokanyStatusProvider);
 
     Future<void> guarded(Future<void> Function() action) async {
       try {
@@ -265,6 +267,45 @@ class SettingsPage extends ConsumerWidget {
                       )
                     : null,
               ),
+            ),
+            SettingsRow(
+              icon: Icons.storage_rounded,
+              tone: Tone.success,
+              title: 'Encrypted drives',
+              subtitle: switch (dokany) {
+                AsyncData(value: DokanyStatus(installed: true)) =>
+                  'Dokany is installed, so encrypted folders can open as a '
+                      'drive, without decrypting anything to the disk.',
+                AsyncData() =>
+                  'Opening encrypted folders as a drive needs Dokany, a '
+                      'free driver that Windows trusts. Install it, then '
+                      'check again.',
+                AsyncError() =>
+                  'Not available: the drive helper is missing. Reinstall '
+                      '${AppInfo.name} to use drives.',
+                _ => 'Checking…',
+              },
+              trailing: switch (dokany) {
+                AsyncData(value: DokanyStatus(installed: true)) =>
+                  const StatusBadge(tone: Tone.success, label: 'Ready'),
+                AsyncData() => Wrap(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    TextButton(
+                      onPressed: () => ref.invalidate(dokanyStatusProvider),
+                      child: const Text('Check again'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => unawaited(
+                        ShellActions.openUrl(AppInfo.dokanyDownloadUrl),
+                      ),
+                      icon: const Icon(Icons.download_rounded, size: 18),
+                      label: const Text('Get Dokany'),
+                    ),
+                  ],
+                ),
+                _ => null,
+              },
             ),
             SettingsRow(
               icon: Icons.folder_open_rounded,

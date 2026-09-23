@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../../core/constants/app_info.dart';
+import '../../../engine/vault/drive_vault.dart';
 import '../domain/protected_item.dart';
 
 /// Why a path can't be protected.
@@ -102,7 +103,11 @@ class PathGuard {
         p.rootPrefix(normalized) == normalized) {
       return PathProblem.driveRoot;
     }
-    if (normalized.toLowerCase().endsWith(AppInfo.vaultExtension)) {
+    // A vault file, a drive vault folder, or anything inside one.
+    if (normalized.toLowerCase().endsWith(AppInfo.vaultExtension) ||
+        p
+            .split(normalized)
+            .any((part) => part.toLowerCase().endsWith(DriveVault.extension))) {
       return PathProblem.isVault;
     }
     if (_systemNames.contains(p.basename(normalized).toLowerCase())) {

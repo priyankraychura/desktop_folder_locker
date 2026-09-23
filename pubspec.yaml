@@ -5,7 +5,7 @@ publish_to: 'none'
 # Windows uses this as the product and file version of folder_locker.exe
 # (build-name = major.minor.patch, build-number = build suffix). Keep it in
 # sync with AppInfo.version and installer/folder_locker.iss.
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.13.4

@@ -95,6 +95,14 @@ class UnlockOperation {
       force: true,
     );
     final header = VaultHeader.read(vaultPath, _crypto);
+    if (header.isDrive) {
+      // Its files are opened by the drive helper, not restored.
+      throw EngineException(
+        EngineErrorCode.unsupportedContent,
+        'This is a drive vault',
+        path: vaultPath,
+      );
+    }
     final unlocked = VaultKeys(_crypto).unlock(header, credential);
 
     final dir = p.dirname(vaultPath);

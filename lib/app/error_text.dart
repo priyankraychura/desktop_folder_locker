@@ -1,4 +1,5 @@
 import '../core/constants/app_info.dart';
+import '../engine/drive/drive_service.dart';
 import '../engine/engine_exception.dart';
 import '../features/auth/application/session_controller.dart';
 import '../features/items/application/path_guard.dart';
@@ -16,7 +17,27 @@ String errorText(Object error) => switch (error) {
         : _protection(issue),
   InvalidRecoveryKeyException() =>
     'That recovery key is not correct. Check for typos and try again.',
+  DriveException() => _drive(error),
   _ => 'Something unexpected went wrong ($error).',
+};
+
+String _drive(DriveException error) => switch (error.code) {
+  DriveErrorCode.helperMissing =>
+    'The drive helper of ${AppInfo.name} is missing. Reinstall the app to '
+        'open drives.',
+  DriveErrorCode.helperStopped =>
+    'The drive helper stopped unexpectedly. Try again.',
+  DriveErrorCode.dokanyMissing =>
+    'Opening drives needs Dokany, a free driver. Install it, then try '
+        'again.',
+  DriveErrorCode.mountFailed =>
+    'Windows could not open the drive. (${error.message})',
+  DriveErrorCode.noDriveLetter =>
+    'No drive letter is free. Disconnect a drive, then try again.',
+  DriveErrorCode.alreadyMounted => 'This vault is open as a drive already.',
+  DriveErrorCode.unmountFailed =>
+    'Windows did not close the drive. Close the files and windows that use '
+        'it, then try again.',
 };
 
 String pathProblemText(PathProblem problem) => switch (problem) {
@@ -84,6 +105,8 @@ String _protection(ProtectionIssue issue) => switch (issue) {
     'Windows did not allow hiding or showing this item.',
   ProtectionIssue.accessRuleFailed =>
     'Windows did not allow changing the permissions of this item.',
+  ProtectionIssue.driveNeedsFolder =>
+    'Only folders can be opened as a drive. Choose "A folder" instead.',
 };
 
 String _engine(EngineException error) => switch (error.code) {
