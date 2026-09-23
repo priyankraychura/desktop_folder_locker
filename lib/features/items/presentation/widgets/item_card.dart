@@ -202,7 +202,7 @@ class _Details extends StatelessWidget {
                 _Look.readOnly => 'Read-only',
                 _Look.hidden => 'Hidden',
                 _Look.unlocked => 'Unlocked',
-                _Look.open => 'Open as ${_driveName(item.mountPoint)}',
+                _Look.open => 'Open as ${item.driveName}',
                 _Look.missing => 'Not found',
               },
             ),
@@ -250,12 +250,6 @@ class _Details extends StatelessWidget {
       ],
     );
   }
-}
-
-/// `V:` for `V:\`.
-String _driveName(String? mountPoint) {
-  final point = mountPoint ?? '';
-  return point.endsWith('\\') ? point.substring(0, point.length - 1) : point;
 }
 
 class _PrimaryAction extends StatelessWidget {

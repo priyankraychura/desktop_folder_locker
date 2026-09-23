@@ -6,10 +6,11 @@
 
 use std::fs::{File, OpenOptions};
 use std::io;
+use std::ops::Deref;
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 
 use dokan::{
@@ -35,7 +36,8 @@ use winapi::um::fileapi::{
 use winapi::um::winnt::{
     ACCESS_MASK, FILE_APPEND_DATA, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_HIDDEN,
     FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_READONLY, FILE_ATTRIBUTE_SYSTEM,
-    FILE_CASE_PRESERVED_NAMES, FILE_UNICODE_ON_DISK, FILE_WRITE_DATA,
+    FILE_CASE_PRESERVED_NAMES, FILE_EXECUTE, FILE_READ_DATA, FILE_UNICODE_ON_DISK, FILE_WRITE_DATA,
+    GENERIC_ALL, GENERIC_EXECUTE, GENERIC_READ, GENERIC_WRITE,
 };
 
 use crate::protocol::Failure;
@@ -54,6 +56,18 @@ const FILE_DELETE_ON_CLOSE: u32 = 0x1000;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
 const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 
+/// Handles opened with any of these read or change a file's contents, so
+/// the file counts as in use while they are open. Others only look at its
+/// name, times or attributes (like Explorer does all the time).
+const DATA_ACCESS: ACCESS_MASK = FILE_READ_DATA
+    | FILE_WRITE_DATA
+    | FILE_APPEND_DATA
+    | FILE_EXECUTE
+    | GENERIC_READ
+    | GENERIC_WRITE
+    | GENERIC_EXECUTE
+    | GENERIC_ALL;
+
 /// Longest volume label Windows shows.
 const MAX_LABEL: usize = 32;
 
@@ -71,10 +85,26 @@ pub struct Handler {
 
 /// What an open handle on the drive refers to.
 pub enum Handle {
-    File(Arc<ContentFile>),
+    File(OpenFile),
     /// A folder, or a handle Dokany opened itself: both are looked up by
     /// name for each request.
     Dir,
+}
+
+/// A file opened on the drive.
+pub struct OpenFile {
+    file: Arc<ContentFile>,
+    /// Set while the handle counts as a file in use (see
+    /// [`Handler::open_files`]).
+    in_use: AtomicBool,
+}
+
+impl Deref for OpenFile {
+    type Target = Arc<ContentFile>;
+
+    fn deref(&self) -> &Arc<ContentFile> {
+        &self.file
+    }
 }
 
 impl Handler {
@@ -101,7 +131,8 @@ impl Handler {
         }
     }
 
-    /// How many files are open on the drive right now.
+    /// How many files programs have open on the drive right now, to read or
+    /// change them.
     pub fn open_files(&self) -> Arc<AtomicUsize> {
         self.open_files.clone()
     }
@@ -113,12 +144,34 @@ impl Handler {
             .ok_or(STATUS_OBJECT_NAME_NOT_FOUND)
     }
 
-    fn open_new(&self, file: Arc<ContentFile>, new: bool) -> CreateFileInfo<Handle> {
-        self.open_files.fetch_add(1, Ordering::Relaxed);
+    fn open_new(
+        &self,
+        file: Arc<ContentFile>,
+        new: bool,
+        desired_access: ACCESS_MASK,
+    ) -> CreateFileInfo<Handle> {
+        let in_use = desired_access & DATA_ACCESS != 0;
+        if in_use {
+            self.open_files.fetch_add(1, Ordering::Relaxed);
+        }
         CreateFileInfo {
-            context: Handle::File(file),
+            context: Handle::File(OpenFile {
+                file,
+                in_use: AtomicBool::new(in_use),
+            }),
             is_dir: false,
             new_file_created: new,
+        }
+    }
+
+    /// The program closed the handle, so it no longer counts as in use.
+    /// Called on cleanup (when the program closes it) and again on close
+    /// (when Windows is done with it, which may come much later).
+    fn release(&self, context: &Handle) {
+        if let Handle::File(open) = context {
+            if open.in_use.swap(false, Ordering::Relaxed) {
+                self.open_files.fetch_sub(1, Ordering::Relaxed);
+            }
         }
     }
 }
@@ -199,7 +252,7 @@ impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for Handler {
                     file.set_len(0).map_err(status)?;
                     set_file_attributes(&file, file_attributes)?;
                 }
-                Ok(self.open_new(file, false))
+                Ok(self.open_new(file, false, desired_access))
             }
             None => {
                 if matches!(create_disposition, FILE_OPEN | FILE_OVERWRITE) {
@@ -223,7 +276,7 @@ impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for Handler {
                 if file_attributes & KEPT_ATTRIBUTES != 0 {
                     let _ = set_file_attributes(&file, file_attributes);
                 }
-                Ok(self.open_new(file, true))
+                Ok(self.open_new(file, true, desired_access))
             }
         }
     }
@@ -232,8 +285,9 @@ impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for Handler {
         &'h self,
         file_name: &U16CStr,
         info: &OperationInfo<'c, 'h, Self>,
-        _context: &'c Self::Context,
+        context: &'c Self::Context,
     ) {
+        self.release(context);
         if info.delete_on_close() {
             if let Ok(path) = path_of(file_name) {
                 let _ = self.vault.remove(&path);
@@ -247,9 +301,7 @@ impl<'c, 'h: 'c> FileSystemHandler<'c, 'h> for Handler {
         _info: &OperationInfo<'c, 'h, Self>,
         context: &'c Self::Context,
     ) {
-        if let Handle::File(_) = context {
-            self.open_files.fetch_sub(1, Ordering::Relaxed);
-        }
+        self.release(context);
     }
 
     fn read_file(

@@ -24,6 +24,10 @@ enum DriveErrorCode {
 
   /// Windows did not close the drive (usually a program still uses it).
   unmountFailed,
+
+  /// Programs still have files open on the drive (see
+  /// [DriveService.unmount]).
+  inUse,
 }
 
 class DriveException implements Exception {
@@ -122,7 +126,11 @@ abstract interface class DriveService {
   });
 
   /// Closes the drive of a vault. Does nothing if it isn't open.
-  Future<void> unmount(String vault);
+  ///
+  /// While programs have files open on the drive, throws
+  /// [DriveErrorCode.inUse], unless [force] is set: then the drive closes
+  /// anyway, and unsaved changes in those files are lost.
+  Future<void> unmount(String vault, {bool force = false});
 
   /// Stops the helper, which closes every drive.
   Future<void> dispose();

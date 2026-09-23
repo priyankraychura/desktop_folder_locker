@@ -91,6 +91,30 @@ void main() {
     },
   );
 
+  test('open drives close again by themselves, but not while in use', () async {
+    await start(const AppSettings(relockAfterMinutes: 60));
+    final drive = await unlockedItem('Drive', method: ProtectionMethod.drive);
+    expect(drive.isMounted, isTrue);
+    final vault = drive.vaultPath!;
+    final watcher = harness.container.read(unlockedItemsWatcherProvider);
+    Future<void> checkAt(int minutes) =>
+        watcher.check(now: drive.unlockedAt!.add(Duration(minutes: minutes)));
+
+    // A program has a file open on it: it stays open.
+    harness.drives.busy.add(vault);
+    await checkAt(61);
+    expect(items().byId(drive.id)!.isMounted, isTrue);
+    expect(harness.drives.isMounted(vault), isTrue);
+
+    // Tried again a few minutes later, once the file is closed.
+    harness.drives.busy.clear();
+    await checkAt(63);
+    expect(items().byId(drive.id)!.isMounted, isTrue);
+    await checkAt(67);
+    expect(items().byId(drive.id)!.isProtected, isTrue);
+    expect(harness.drives.isMounted(vault), isFalse);
+  });
+
   test('nothing happens when both options are off', () async {
     await start(const AppSettings(remindAfterMinutes: 0));
     final item = await unlockedItem('Photos');

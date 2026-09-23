@@ -105,8 +105,7 @@ begin
     'Your data stays safe after {#AppName} is removed:' + #13#10 + #13#10 +
     '- Locked items stay encrypted. Install {#AppName} again to open them ' +
     'with your password or recovery key.' + #13#10 +
-    '- Encrypted drives (folders ending in .flkd) stay encrypted too.' +
-    #13#10 +
+    '- Encrypted drives (.flkd folders) stay encrypted too.' + #13#10 +
     '- Blocked and read-only items stay protected. Unlock them first, or ' +
     'install {#AppName} again to unlock them.' + #13#10 +
     '- Unlocked items stay normal folders and files.' + #13#10 +

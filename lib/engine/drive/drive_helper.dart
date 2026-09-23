@@ -112,11 +112,11 @@ class HelperDriveService implements DriveService {
   }
 
   @override
-  Future<void> unmount(String vault) async {
+  Future<void> unmount(String vault, {bool force = false}) async {
     // Without a running helper, nothing is open.
     if (_process == null) return;
     try {
-      await _call({'cmd': 'unmount', 'vault': vault});
+      await _call({'cmd': 'unmount', 'vault': vault, 'force': force});
     } on _NotMounted {
       // Closed already.
     }
@@ -298,6 +298,7 @@ class HelperDriveService implements DriveService {
         message,
       ),
       'unmountFailed' => DriveException(DriveErrorCode.unmountFailed, message),
+      'inUse' => DriveException(DriveErrorCode.inUse, message),
       'mountFailed' => DriveException(DriveErrorCode.mountFailed, message),
       'unsupported' when mounting => DriveException(
         DriveErrorCode.mountFailed,

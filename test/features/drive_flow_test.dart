@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:desktop_folder_locker/core/di/core_providers.dart';
 import 'package:desktop_folder_locker/engine/crypto/recovery_key.dart';
+import 'package:desktop_folder_locker/engine/drive/drive_service.dart';
 import 'package:desktop_folder_locker/engine/engine_exception.dart';
 import 'package:desktop_folder_locker/engine/format/vault_header.dart';
 import 'package:desktop_folder_locker/engine/vault/drive_vault.dart';
@@ -184,6 +185,32 @@ void main() {
       protection().remove(relocked),
       throwsA(isA<ProtectionException>()),
     );
+  });
+
+  test('a drive in use only closes when forced', () async {
+    final item = await lockAsDrive('Busy');
+    final vault = item.vaultPath!;
+    await protection().unlock(item);
+    harness.drives.busy.add(vault);
+    final inUse = throwsA(
+      isA<DriveException>().having((e) => e.code, 'code', DriveErrorCode.inUse),
+    );
+
+    await expectLater(protection().lockAgain(items().byId(item.id)!), inUse);
+    await expectLater(protection().decryptDrive(items().byId(item.id)!), inUse);
+    // Locking everything (the tray, or with the app) leaves it open too.
+    final left = await protection().lockAllUnlocked();
+    expect(left.map((left) => left.id), [item.id]);
+    expect(items().byId(item.id)!.isMounted, isTrue);
+    expect(harness.drives.isMounted(vault), isTrue);
+    expect(Directory(vault).existsSync(), isTrue);
+
+    final locked = await protection().lockAgain(
+      items().byId(item.id)!,
+      force: true,
+    );
+    expect(locked.isProtected, isTrue);
+    expect(harness.drives.isMounted(vault), isFalse);
   });
 
   test('a failed import puts the folder back', () async {

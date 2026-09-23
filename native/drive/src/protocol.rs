@@ -55,13 +55,15 @@ pub enum Command {
         #[serde(default)]
         read_only: bool,
     },
+    /// Closes the drive. Unless `force` is set, fails with `inUse` while
+    /// programs have files open on it.
     Unmount {
         vault: PathBuf,
+        #[serde(default)]
+        force: bool,
     },
     /// Cancels the import or export with the id `target`.
-    Cancel {
-        target: u64,
-    },
+    Cancel { target: u64 },
     /// Lists the mounted vaults.
     List,
 }
@@ -158,6 +160,12 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+        let unmount: Request =
+            serde_json::from_str(r#"{"id": 8, "cmd": "unmount", "vault": "C:\\v.flkd"}"#).unwrap();
+        assert!(matches!(
+            unmount.command,
+            Command::Unmount { force: false, .. }
+        ));
         let hello: Request = serde_json::from_str(r#"{"id": 1, "cmd": "hello"}"#).unwrap();
         assert!(matches!(hello.command, Command::Hello));
         assert!(serde_json::from_str::<Request>(r#"{"id": 1, "cmd": "format"}"#).is_err());

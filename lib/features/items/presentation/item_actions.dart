@@ -11,6 +11,7 @@ import '../../../core/di/core_providers.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/feedback.dart';
+import '../../../engine/drive/drive_service.dart';
 import '../../../engine/engine_exception.dart';
 import '../../../engine/vault/drive_vault.dart';
 import '../../../engine/vault/fs_utils.dart';
@@ -144,13 +145,38 @@ class ItemActions {
         hint = choice.passwordHint ?? '';
     }
     await _run(() async {
-      final locked = await _controller.lockAgain(
-        item,
-        customPassword: customPassword,
-        passwordHint: hint,
-      );
+      ProtectedItem locked;
+      try {
+        locked = await _controller.lockAgain(
+          item,
+          customPassword: customPassword,
+          passwordHint: hint,
+        );
+      } on DriveException catch (error) {
+        if (error.code != DriveErrorCode.inUse) rethrow;
+        if (!await _confirmCloseInUse(item)) return;
+        locked = await _controller.lockAgain(item, force: true);
+      }
       _toastProtected(locked);
     });
+  }
+
+  /// Programs still have files open on the drive of [item]: asks whether
+  /// to close it anyway.
+  Future<bool> _confirmCloseInUse(ProtectedItem item) async {
+    if (!_context.mounted) return false;
+    return showConfirmDialog(
+      _context,
+      title: 'Files on ${item.driveName} are still open',
+      message:
+          'Programs still have files open on the drive of “${item.name}”. '
+          'Save your work and close them first. If you close the drive now, '
+          'unsaved changes in those files are lost.',
+      confirmLabel: 'Close anyway',
+      icon: Icons.storage_rounded,
+      tone: Tone.warning,
+      destructive: true,
+    );
   }
 
   Future<void> _toggle(ProtectedItem item) async {
@@ -294,9 +320,8 @@ class ItemActions {
       final drive = item.mountPoint!;
       if (open) unawaited(ShellActions.reveal(drive));
       showToast(
-        '“${item.name}” is open as drive '
-        '${drive.endsWith(r'\') ? drive.substring(0, drive.length - 1) : drive}. '
-        'Lock it when you are done.',
+        '“${item.name}” is open as drive ${item.driveName}. Lock it when you '
+        'are done.',
         tone: Tone.success,
         icon: Icons.storage_rounded,
         actionLabel: open ? null : 'Open',

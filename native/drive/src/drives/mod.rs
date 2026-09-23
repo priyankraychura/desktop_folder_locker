@@ -48,7 +48,7 @@ impl Drives {
         Err(Failure::new("unsupported", "Drives need Windows"))
     }
 
-    pub fn unmount(&self, _vault: &std::path::Path) -> Result<Value, Failure> {
+    pub fn unmount(&self, _vault: &std::path::Path, _force: bool) -> Result<Value, Failure> {
         Err(Failure::new("notMounted", "The vault is not mounted"))
     }
 

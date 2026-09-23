@@ -243,13 +243,17 @@ class ProtectionController extends Notifier<ActiveOperation?> {
 
   /// Applies an item's protection again after it was unlocked (for a
   /// drive: closes the drive).
+  ///
+  /// A drive with files open in programs only closes with [force] (see
+  /// [DriveService.unmount]); otherwise it throws [DriveErrorCode.inUse].
   Future<ProtectedItem> lockAgain(
     ProtectedItem item, {
     String? customPassword,
     String? passwordHint,
+    bool force = false,
   }) {
     _ensureIdle();
-    if (item.isMounted) return _unmount(item);
+    if (item.isMounted) return _unmount(item, force: force);
     final next = passwordHint == null
         ? item
         : item.copyWith(
@@ -391,10 +395,13 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     }
   }
 
-  Future<ProtectedItem> _unmount(ProtectedItem item) async {
+  Future<ProtectedItem> _unmount(
+    ProtectedItem item, {
+    required bool force,
+  }) async {
     state = ActiveOperation(kind: OperationKind.locking, itemName: item.name);
     try {
-      await _drives.unmount(item.vaultPath!);
+      await _drives.unmount(item.vaultPath!, force: force);
       final updated = (_items.byId(item.id) ?? item).copyWith(
         status: ProtectionStatus.protected,
         clearMountPoint: true,

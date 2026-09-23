@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_palette.dart';
 import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/feedback.dart';
 import '../../../core/widgets/icon_tile.dart';
 import '../../items/domain/protected_item.dart';
 
@@ -35,7 +36,9 @@ Future<ExitChoice?> showExitDialog(
               child: Row(
                 children: [
                   IconTile(
-                    icon: item.kind == ItemKind.folder
+                    icon: item.isDrive
+                        ? Icons.storage_rounded
+                        : item.kind == ItemKind.folder
                         ? Icons.folder_rounded
                         : Icons.insert_drive_file_rounded,
                     tone: Tone.warning,
@@ -53,6 +56,15 @@ Future<ExitChoice?> showExitDialog(
               ),
             ),
           if (more > 0) Text('and $more more…', style: context.text.bodySmall),
+          // The drive helper stops with the app, which closes every drive.
+          if (unlocked.any((item) => item.isMounted)) ...[
+            const SizedBox(height: AppSpacing.sm),
+            const InfoBanner(
+              message:
+                  'Open drives close with the app either way. Save your work '
+                  'on them first.',
+            ),
+          ],
         ],
       ),
       actions: [

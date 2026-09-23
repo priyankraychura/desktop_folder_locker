@@ -38,6 +38,9 @@ String _drive(DriveException error) => switch (error.code) {
   DriveErrorCode.unmountFailed =>
     'Windows did not close the drive. Close the files and windows that use '
         'it, then try again.',
+  DriveErrorCode.inUse =>
+    'Files on the drive are still open in other programs. Save your work '
+        'and close them, then try again.',
 };
 
 String pathProblemText(PathProblem problem) => switch (problem) {

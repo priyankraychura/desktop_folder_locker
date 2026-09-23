@@ -150,7 +150,19 @@ void main() {
     expect(find.text(r'Open as V:'), findsOneWidget);
     expect(harness.drives.isMounted(item.vaultPath!), isTrue);
 
+    // A program has a file open on the drive: closing it asks first.
+    harness.drives.busy.add(item.vaultPath!);
     await tester.tap(find.widgetWithText(FilledButton, 'Lock'));
+    await settleReal(tester, rounds: 20);
+    expect(find.text('Files on V: are still open'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await settleReal(tester);
+    expect(find.text(r'Open as V:'), findsOneWidget);
+    expect(harness.drives.isMounted(item.vaultPath!), isTrue);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Lock'));
+    await settleReal(tester, rounds: 20);
+    await tester.tap(find.widgetWithText(FilledButton, 'Close anyway'));
     await settleReal(tester, rounds: 20);
     expect(find.text('Locked'), findsWidgets);
     expect(harness.drives.isMounted(item.vaultPath!), isFalse);

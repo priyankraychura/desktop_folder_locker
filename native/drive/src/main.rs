@@ -115,8 +115,8 @@ impl Helper {
                     read_only,
                 })
             }),
-            Command::Unmount { vault } => {
-                self.run(id, move |helper, _| helper.drives.unmount(&vault))
+            Command::Unmount { vault, force } => {
+                self.run(id, move |helper, _| helper.drives.unmount(&vault, force))
             }
         }
     }

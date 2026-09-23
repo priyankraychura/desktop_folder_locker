@@ -134,6 +134,13 @@ class ProtectedItem {
   /// Whether the item is open as a drive right now.
   bool get isMounted => isDrive && !isProtected && mountPoint != null;
 
+  /// The drive it is open as, like `V:` (for the mount point `V:\`).
+  String? get driveName {
+    final point = mountPoint;
+    if (point == null || !point.endsWith(r'\')) return point;
+    return point.substring(0, point.length - 1);
+  }
+
   /// Whether an encrypted vault of the item exists (and has key slots to
   /// update when a password or the recovery key changes).
   bool get hasVault =>

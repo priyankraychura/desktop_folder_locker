@@ -23,6 +23,9 @@ use crate::protocol::{Failure, Output};
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(60);
 const MOUNT_TIMEOUT: Duration = Duration::from_secs(20);
 const UNMOUNT_TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a drive may take to have no files open before it counts as in
+/// use: virus scanners and thumbnails open files for a moment.
+const IN_USE_GRACE: Duration = Duration::from_secs(2);
 
 /// Loads Dokany's library, only from System32 (never from next to the
 /// helper), and starts it. The helper links it with delay loading, so it
@@ -220,22 +223,29 @@ impl Drives {
         }
     }
 
-    /// Unmounts a vault. Programs that still have files open on the drive
-    /// lose access to them.
-    pub fn unmount(&self, vault: &Path) -> Result<Value, Failure> {
+    /// Unmounts a vault. While programs have files open on the drive, this
+    /// fails with `inUse`, unless `force` is set: then they lose access to
+    /// those files, and unsaved changes in them are lost.
+    pub fn unmount(&self, vault: &Path, force: bool) -> Result<Value, Failure> {
         let key = vault_key(vault);
-        let (mount_point, thread, open_files) = {
-            let mut mounts = lock(&self.mounts);
+        let (mount_point, open_files) = {
+            let mounts = lock(&self.mounts);
             let mount = mounts
-                .get_mut(&key)
+                .get(&key)
                 .filter(|mount| mount.ready)
                 .ok_or_else(|| Failure::new("notMounted", "The vault is not open as a drive"))?;
-            (
-                mount.mount_point.clone(),
-                mount.thread.take(),
-                mount.open_files.load(Ordering::Relaxed),
-            )
+            (mount.mount_point.clone(), mount.open_files.clone())
         };
+        if !force && !no_open_files(&open_files) {
+            return Err(Failure::new(
+                "inUse",
+                format!("Programs still have files open on {mount_point}"),
+            ));
+        }
+        let open_files = open_files.load(Ordering::Relaxed);
+        let thread = lock(&self.mounts)
+            .get_mut(&key)
+            .and_then(|mount| mount.thread.take());
         // If Dokany refuses, the wait below times out and says so.
         let _ = unmount_point(&mount_point);
         if let Some(thread) = thread {
@@ -278,7 +288,7 @@ impl Drives {
             .map(|mount| mount.vault.clone())
             .collect();
         for vault in vaults {
-            let _ = self.unmount(&vault);
+            let _ = self.unmount(&vault, true);
         }
         if dokany_loaded() && lock(&self.mounts).is_empty() {
             dokan::shutdown();
@@ -304,6 +314,21 @@ fn serve(handler: &Handler, mount_point: &str, flags: MountFlags) -> Result<(), 
     // Blocks until the drive is unmounted.
     drop(file_system);
     Ok(())
+}
+
+/// Whether no program has a file open on the drive, waiting a moment for
+/// files that are only open briefly.
+fn no_open_files(open_files: &AtomicUsize) -> bool {
+    let started = Instant::now();
+    loop {
+        if open_files.load(Ordering::Relaxed) == 0 {
+            return true;
+        }
+        if started.elapsed() >= IN_USE_GRACE {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
 }
 
 /// Asks Dokany to remove the drive; its thread ends once it's gone.

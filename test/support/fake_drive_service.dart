@@ -23,6 +23,10 @@ class FakeDriveService implements DriveService {
   /// Open drives: vault folder → mount point.
   final Map<String, String> mounts = {};
 
+  /// Vault folders whose drive has files open in programs, so it only
+  /// closes when forced.
+  final Set<String> busy = {};
+
   final Map<String, Uint8List> _keys = {};
   final StreamController<String> _unmounted =
       StreamController<String>.broadcast();
@@ -99,7 +103,12 @@ class FakeDriveService implements DriveService {
   }
 
   @override
-  Future<void> unmount(String vault) async {
+  Future<void> unmount(String vault, {bool force = false}) async {
+    if (!force &&
+        isMounted(vault) &&
+        busy.map(_normal).contains(_normal(vault))) {
+      throw const DriveException(DriveErrorCode.inUse, 'files are open');
+    }
     mounts.remove(_normal(vault));
   }
 

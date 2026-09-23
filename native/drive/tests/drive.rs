@@ -89,6 +89,21 @@ fn vault_header(vault_id: [u8; 16], block_size: u32) -> Vec<u8> {
     header
 }
 
+/// Unmounts without forcing, giving files that something else (a virus
+/// scanner) opened a few seconds to close.
+fn unmount_when_free(helper: &mut Helper, vault: &Path) {
+    let started = Instant::now();
+    loop {
+        let reply = helper.request(json!({"cmd": "unmount", "vault": vault}));
+        if reply["ok"] == true {
+            return;
+        }
+        assert_eq!(reply["error"]["code"], "inUse", "{reply}");
+        assert!(started.elapsed() < Duration::from_secs(20), "{reply}");
+        thread::sleep(Duration::from_millis(500));
+    }
+}
+
 fn wait_until_gone(drive: &Path) {
     let started = Instant::now();
     while drive.exists() && started.elapsed() < Duration::from_secs(10) {
@@ -229,7 +244,12 @@ fn mounts_a_vault_as_a_drive() {
     let again = helper.request(json!({"cmd": "mount", "vault": vault, "key": key, "label": "x"}));
     assert_eq!(again["error"]["code"], "alreadyMounted", "{again}");
 
-    helper.ok(json!({"cmd": "unmount", "vault": vault}));
+    // A file open in a program keeps the drive open.
+    let open = File::open(at("big.bin")).unwrap();
+    let busy = helper.request(json!({"cmd": "unmount", "vault": vault}));
+    assert_eq!(busy["error"]["code"], "inUse", "{busy}");
+    drop(open);
+    unmount_when_free(&mut helper, &vault);
     wait_until_gone(&drive);
 
     // Another key is refused.
@@ -265,6 +285,13 @@ fn mounts_a_vault_as_a_drive() {
     fs::set_permissions(at("big.bin"), permissions).unwrap();
     assert!(!at("Docs").exists());
 
+    // Forced, the drive closes even with a file open.
+    let open = File::open(at("big.bin")).unwrap();
+    helper.ok(json!({"cmd": "unmount", "vault": vault, "force": true}));
+    wait_until_gone(&drive);
+    drop(open);
+
+    let drive = helper.mount(&vault, &key);
     let listed = helper.ok(json!({"cmd": "list"}));
     assert_eq!(listed["mounts"].as_array().unwrap().len(), 1);
 
