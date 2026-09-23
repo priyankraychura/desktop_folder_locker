@@ -1,0 +1,32 @@
+name: desktop_folder_locker
+description: "Lock, encrypt and hide folders on Windows."
+publish_to: 'none'
+
+# Windows uses this as the product and file version of folder_locker.exe
+# (build-name = major.minor.patch, build-number = build suffix). Keep it in
+# sync with AppInfo.version and installer/folder_locker.iss.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  desktop_drop: ^0.8.4
+  ffi: ^2.2.0
+  file_selector: ^1.1.0
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.4.3
+  intl: ^0.20.3
+  path: ^1.9.1
+  sodium: ^4.1.0+1
+  win32_registry: ^3.0.3
+  window_manager: ^0.5.2
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

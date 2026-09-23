@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.5
+
+jobs:
+  checks:
+    name: Analyze and test (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Get packages
+        run: flutter pub get
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      # The first run also compiles libsodium from source (build hook).
+      - name: Test
+        run: flutter test
+
+  windows:
+    name: Test and build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Get packages
+        run: flutter pub get
+
+      # Also exercises the Windows code paths of the engine: NTFS renames,
+      # file attributes and free-space checks through FFI.
+      - name: Test
+        run: flutter test
+
+      - name: Build app
+        run: flutter build windows --release
+
+      # Flutter apps need the Visual C++ runtime. Shipping these three DLLs
+      # next to the exe (as the Flutter docs suggest) means users don't have
+      # to install the redistributable.
+      - name: Bundle the Visual C++ runtime
+        shell: pwsh
+        run: |
+          $release = 'build\windows\x64\runner\Release'
+          foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:WINDIR\System32\$dll" $release
+          }
+          Get-ChildItem $release
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          & $iscc "/DAppVersion=$version" installer\folder_locker.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: folder-locker-setup
+          path: build/installer/*.exe
+          if-no-files-found: error
+
+      - name: Upload app folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: folder-locker-windows-x64
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
