@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:desktop_folder_locker/app/app.dart';
+import 'package:desktop_folder_locker/app/app_window.dart';
 import 'package:desktop_folder_locker/core/di/core_providers.dart';
 import 'package:desktop_folder_locker/core/storage/app_paths.dart';
 import 'package:desktop_folder_locker/engine/crypto/crypto_service.dart';
@@ -8,6 +9,7 @@ import 'package:desktop_folder_locker/engine/crypto/kdf_params.dart';
 import 'package:desktop_folder_locker/engine/vault/fs_utils.dart';
 import 'package:desktop_folder_locker/features/settings/application/settings_controller.dart';
 import 'package:desktop_folder_locker/features/settings/domain/app_settings.dart';
+import 'package:desktop_folder_locker/platform/shell_actions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'fake_access_rules.dart';
+import 'fake_app_window.dart';
 import 'fake_dokany_installer.dart';
 import 'fake_drive_service.dart';
 import 'fake_system_tray.dart';
@@ -29,6 +32,8 @@ class AppHarness {
     this.tray,
     this.drives,
     this.dokanyInstaller,
+    this.window,
+    this.started,
   );
 
   final Directory root;
@@ -46,10 +51,19 @@ class AppHarness {
   /// Stands in for Dokany's installer (not bundled unless a test says so).
   final FakeDokanyInstaller dokanyInstaller;
 
+  /// Stands in for the app's window.
+  final FakeAppWindow window;
+
+  /// Programs the app started (like Explorer, to show a folder), which
+  /// don't really start in tests.
+  final List<List<String>> started;
+
   static Future<AppHarness> create({
     AppSettings settings = const AppSettings(),
     Directory? root,
     FakeDriveService? drives,
+    WindowState initialWindow = const WindowState(),
+    bool windowVisible = true,
   }) async {
     root ??= await Directory.systemTemp.createTemp('flk_app_');
     final crypto = await CryptoService.create();
@@ -58,6 +72,12 @@ class AppHarness {
     final tray = FakeSystemTray();
     drives ??= FakeDriveService();
     final dokanyInstaller = FakeDokanyInstaller();
+    final window = FakeAppWindow(visible: windowVisible);
+    final started = <List<String>>[];
+    ShellActions.start = (executable, args) async {
+      started.add([executable, ...args]);
+      return true;
+    };
     final container = ProviderContainer(
       overrides: [
         appPathsProvider.overrideWithValue(paths),
@@ -74,6 +94,8 @@ class AppHarness {
         systemTrayProvider.overrideWithValue(tray),
         driveServiceProvider.overrideWithValue(drives),
         dokanyInstallerProvider.overrideWithValue(dokanyInstaller),
+        initialWindowStateProvider.overrideWithValue(initialWindow),
+        appWindowProvider.overrideWithValue(window),
       ],
       retry: (_, _) => null,
     );
@@ -84,6 +106,8 @@ class AppHarness {
       tray,
       drives,
       dokanyInstaller,
+      window,
+      started,
     );
   }
 

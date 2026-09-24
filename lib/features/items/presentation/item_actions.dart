@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../app/app_window.dart';
 import '../../../app/dokany_install.dart';
 import '../../../app/error_text.dart';
 import '../../../core/di/core_providers.dart';
@@ -308,7 +309,21 @@ class ItemActions {
   Future<void> openVault(String vaultPath) async {
     vaultPath = DriveVault.folderOf(vaultPath);
     if (!FsUtils.exists(vaultPath)) {
-      showToast('That vault no longer exists.', tone: Tone.warning);
+      // Alone in its small window, a toast would go with the window.
+      if (_ref.read(windowStateProvider).mode == WindowMode.request) {
+        if (!_context.mounted) return;
+        await showNoticeDialog(
+          _context,
+          title: '“${p.basename(vaultPath)}” is gone',
+          message:
+              'It was moved or deleted after Explorer showed it. Open it '
+              'from where it is now.',
+          icon: Icons.search_off_rounded,
+          tone: Tone.warning,
+        );
+      } else {
+        showToast('That vault no longer exists.', tone: Tone.warning);
+      }
       return;
     }
     final item = _ref.read(itemsControllerProvider.notifier).byPath(vaultPath);

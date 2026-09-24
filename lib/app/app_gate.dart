@@ -7,14 +7,25 @@ import '../features/auth/application/session_controller.dart';
 import '../features/auth/presentation/lock_screen.dart';
 import '../features/setup/presentation/setup_page.dart';
 import '../features/shell/presentation/home_shell.dart';
+import 'app_window.dart';
 
 /// Shows onboarding, the lock screen or the main window depending on the
-/// session, with a soft cross-fade between them.
+/// session, with a soft cross-fade between them. In the small window that
+/// Explorer requests get, only their dialog shows.
 class AppGate extends ConsumerWidget {
   const AppGate({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final requestWindow = ref.watch(
+      windowStateProvider.select((state) => state.mode == WindowMode.request),
+    );
+    // Only the dialog Explorer asked for shows, on this background.
+    if (requestWindow) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).dialogTheme.backgroundColor,
+      );
+    }
     final status = ref.watch(
       sessionControllerProvider.select((state) => state.status),
     );

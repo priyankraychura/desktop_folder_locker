@@ -68,12 +68,13 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 2. First start: create a master password, then copy the recovery key.
 3. Drag a test folder into the app → **Encrypt** → `Name.flk` appears in the
    same place, with the lock icon.
-4. Close the app. Double-click `Name.flk` → the app opens with the password
-   dialog → the folder is restored and opened in Explorer.
+4. Close the app. Double-click `Name.flk` → only the password dialog shows,
+   in a small window → the folder is restored and opened in Explorer, and
+   the window goes away. Cancelling instead ends the app.
 5. Right-click a folder → *Show more options* (Windows 11) → **Lock with
    Folder Locker** → the protect dialog opens.
-6. With the app open, double-click another vault → the same window comes
-   to the front (no second window).
+6. With the app open, double-click another vault → the password dialog
+   shows over the app, in the same window (no second window).
 7. **Hide only** → the folder disappears from Explorer; **Show** brings it
    back.
 8. A custom-password item → lock the app (`Ctrl+L`) → the item asks for its

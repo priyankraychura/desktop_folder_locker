@@ -145,6 +145,12 @@ class _UnlockDialogState extends ConsumerState<_UnlockDialog> {
   @override
   Widget build(BuildContext context) {
     final hint = _hint;
+    // Escape, or the close button of Explorer's small window, can't close it
+    // halfway through unlocking.
+    return PopScope(canPop: !_busy, child: _dialog(context, hint));
+  }
+
+  Widget _dialog(BuildContext context, String? hint) {
     return AppDialog(
       icon: widget.decrypt
           ? Icons.no_encryption_rounded

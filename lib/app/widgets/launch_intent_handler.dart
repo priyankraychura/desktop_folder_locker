@@ -3,9 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:window_manager/window_manager.dart';
 
-import '../../core/di/core_providers.dart';
 import '../../core/theme/app_palette.dart';
 import '../../core/widgets/app_keys.dart';
 import '../../core/widgets/feedback.dart';
@@ -13,14 +11,16 @@ import '../../features/auth/application/session_controller.dart';
 import '../../features/items/application/protection_controller.dart';
 import '../../features/items/presentation/item_actions.dart';
 import '../../features/shell/application/launch_intents.dart';
+import '../app_window.dart';
 
 /// Handles requests from Explorer ("unlock this vault", "lock this
 /// folder", "unlock this folder") one at a time, as soon as the app is
 /// ready for them.
 ///
 /// Opening a vault works even while the app is locked (the vault's own
-/// password is asked); locking and unlocking items need the app to be
-/// unlocked first.
+/// password is asked), and shows just its dialog when the app isn't open
+/// (see [WindowController]); locking and unlocking items need the app to
+/// be unlocked first.
 class LaunchIntentHandler extends ConsumerStatefulWidget {
   const LaunchIntentHandler({required this.child, super.key});
 
@@ -47,6 +47,15 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
   Future<void> _pump() async {
     if (_handling || !mounted) return;
     final session = ref.read(sessionControllerProvider);
+    final window = ref.read(windowStateProvider.notifier);
+    final setUp =
+        session.status != SessionStatus.needsSetup &&
+        session.status != SessionStatus.onboarding;
+    if (!setUp && ref.read(windowStateProvider).mode == WindowMode.request) {
+      // Nothing opens before the app is set up: that needs the app.
+      await window.showMain();
+      return;
+    }
     final ready =
         session.status == SessionStatus.locked ||
         session.status == SessionStatus.unlocked;
@@ -63,7 +72,7 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
 
     _handling = true;
     try {
-      await _bringToFront();
+      await window.present(intent);
       final context = rootNavigatorKey.currentContext;
       if (context == null || !context.mounted) return;
       final actions = ItemActions(context, ref);
@@ -78,6 +87,7 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
     } finally {
       _handling = false;
     }
+    await window.finishRequest();
     _schedule();
   }
 
@@ -101,17 +111,6 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
     UnlockPathIntent() => 'unlock',
     OpenVaultIntent() => null,
   };
-
-  Future<void> _bringToFront() async {
-    if (!ref.read(nativeWindowProvider)) return;
-    try {
-      if (await windowManager.isMinimized()) await windowManager.restore();
-      await windowManager.show();
-      await windowManager.focus();
-    } on Object {
-      // Not critical.
-    }
-  }
 
   @override
   Widget build(BuildContext context) {

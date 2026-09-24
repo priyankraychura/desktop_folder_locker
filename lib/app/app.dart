@@ -8,6 +8,7 @@ import '../core/widgets/app_keys.dart';
 import '../features/items/presentation/widgets/operation_overlay.dart';
 import '../features/settings/application/settings_controller.dart';
 import 'app_gate.dart';
+import 'app_window.dart';
 import 'widgets/activity_detector.dart';
 import 'widgets/close_guard.dart';
 import 'widgets/launch_intent_handler.dart';
@@ -23,6 +24,9 @@ class FolderLockerApp extends ConsumerWidget {
       settingsControllerProvider.select((settings) => settings.themeMode),
     );
     final nativeWindow = ref.watch(nativeWindowProvider);
+    final requestWindow = ref.watch(
+      windowStateProvider.select((state) => state.mode == WindowMode.request),
+    );
 
     return MaterialApp(
       title: AppInfo.name,
@@ -41,12 +45,42 @@ class FolderLockerApp extends ConsumerWidget {
           child: TrayHandler(
             nativeWindow: nativeWindow,
             child: LaunchIntentHandler(
-              child: OperationOverlay(child: child ?? const SizedBox.shrink()),
+              child: OperationOverlay(
+                child: _DialogLook(
+                  alone: requestWindow,
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
             ),
           ),
         ),
       ),
       home: const AppGate(),
+    );
+  }
+}
+
+/// In the small window, a dialog is all there is: no dimming or shadow
+/// around it, on a background of its own color (see `AppGate`).
+class _DialogLook extends StatelessWidget {
+  const _DialogLook({required this.alone, required this.child});
+
+  final bool alone;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!alone) return child;
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        dialogTheme: theme.dialogTheme.copyWith(
+          barrierColor: Colors.transparent,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+        ),
+      ),
+      child: child,
     );
   }
 }

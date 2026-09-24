@@ -14,10 +14,12 @@ import '../../features/items/application/items_controller.dart';
 import '../../features/items/application/protection_controller.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/shell/presentation/exit_dialog.dart';
+import '../app_window.dart';
 
 /// Intercepts the window's close button. With "Keep running in the
 /// notification area" on, the window only hides; otherwise the app exits
-/// through [exitApp].
+/// through [exitApp]. In the small window of an Explorer request, it
+/// works like the dialog's Cancel.
 class CloseGuard extends ConsumerStatefulWidget {
   const CloseGuard({required this.enabled, required this.child, super.key});
 
@@ -49,6 +51,9 @@ class _CloseGuardState extends ConsumerState<CloseGuard> with WindowListener {
   void onWindowClose() => unawaited(_handleClose());
 
   Future<void> _handleClose() async {
+    if (ref.read(windowStateProvider).mode == WindowMode.request) {
+      return _closeRequest();
+    }
     final settings = ref.read(settingsControllerProvider);
     final tray = ref.read(systemTrayProvider);
     if (!settings.keepRunningInTray || !tray.isAvailable) {
@@ -64,6 +69,15 @@ class _CloseGuardState extends ConsumerState<CloseGuard> with WindowListener {
       );
       await ref.read(settingsControllerProvider.notifier).markTrayHintShown();
     }
+  }
+
+  /// Closes the dialog, which ends the request, unless it's busy. Without
+  /// a dialog, the request is over.
+  Future<void> _closeRequest() async {
+    if (ref.read(protectionControllerProvider) != null) return;
+    final navigator = rootNavigatorKey.currentState;
+    if (navigator != null && await navigator.maybePop()) return;
+    await ref.read(windowStateProvider.notifier).finishRequest();
   }
 
   @override

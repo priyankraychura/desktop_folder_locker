@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'windows/win32_ffi.dart';
@@ -37,7 +38,19 @@ abstract final class ShellActions {
     Win32.shChangeNotify(Win32.shcneUpdateDir, path: p.dirname(path));
   }
 
-  static Future<bool> _start(String executable, List<String> args) async {
+  /// Starts a program and doesn't wait for it. Tests replace it, so that
+  /// nothing opens on the machine that runs them.
+  @visibleForTesting
+  static Future<bool> Function(String executable, List<String> args) start =
+      _startDetached;
+
+  static Future<bool> _start(String executable, List<String> args) =>
+      start(executable, args);
+
+  static Future<bool> _startDetached(
+    String executable,
+    List<String> args,
+  ) async {
     try {
       await Process.start(executable, args, mode: ProcessStartMode.detached);
       return true;

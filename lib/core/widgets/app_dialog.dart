@@ -101,6 +101,29 @@ class AppDialog extends StatelessWidget {
   );
 }
 
+/// A message with an OK button, in the app's dialog style.
+Future<void> showNoticeDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  IconData icon = Icons.info_outline_rounded,
+  Tone tone = Tone.primary,
+}) => showDialog<void>(
+  context: context,
+  builder: (context) => AppDialog(
+    icon: icon,
+    tone: tone,
+    title: title,
+    content: Text(message, style: context.text.bodyMedium),
+    actions: [
+      FilledButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('OK'),
+      ),
+    ],
+  ),
+);
+
 /// A yes/no question in the app's dialog style. Returns `true` when the
 /// user confirms.
 Future<bool> showConfirmDialog(

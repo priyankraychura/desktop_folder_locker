@@ -17,7 +17,7 @@ import '../../features/items/domain/protected_item.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/shell/presentation/lock_app_action.dart';
 import '../../platform/system_tray.dart';
-import '../window_actions.dart';
+import '../app_window.dart';
 import 'close_guard.dart';
 
 /// Keeps the notification-area icon in sync with the app (tooltip, menu,
@@ -70,10 +70,16 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
         .length;
   }
 
-  /// Shows, updates or removes the icon to match the current state.
+  /// Shows, updates or removes the icon to match the current state. While
+  /// Explorer's request is all the app was started for, there's none: the
+  /// app may quit right after it.
   void _sync() {
     if (!mounted || !_tray.isAvailable) return;
-    if (!ref.read(settingsControllerProvider).keepRunningInTray) {
+    final window = ref.read(windowStateProvider);
+    final justForRequest =
+        window.startedForRequest && window.mode == WindowMode.request;
+    if (!ref.read(settingsControllerProvider).keepRunningInTray ||
+        justForRequest) {
       if (_shown != null) unawaited(_tray.hide());
       _shown = null;
       return;
@@ -121,9 +127,8 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
     }
   }
 
-  Future<void> _showWindow() async {
-    if (widget.nativeWindow) await showMainWindow();
-  }
+  Future<void> _showWindow() =>
+      ref.read(windowStateProvider.notifier).showMain();
 
   Future<void> _lockAll() async {
     final left = await ref
@@ -171,7 +176,8 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
     ref
       ..listen(itemsControllerProvider, (_, _) => _sync())
       ..listen(sessionControllerProvider, (_, _) => _sync())
-      ..listen(settingsControllerProvider, (_, _) => _sync());
+      ..listen(settingsControllerProvider, (_, _) => _sync())
+      ..listen(windowStateProvider, (_, _) => _sync());
     return widget.child;
   }
 }

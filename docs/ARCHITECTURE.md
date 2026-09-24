@@ -66,8 +66,11 @@ Rules that keep the code consistent:
    Riverpod container.
 3. **Explorer entries.** It makes the registry match the Explorer
    integration setting.
-4. **Window.** It sets up the window with `window_manager`: size, custom
-   title bar, and show only when the first frame is ready.
+4. **Window.** It sets up the window with `window_manager`
+   (`app/app_window.dart`) and shows it once the first frame is ready.
+   Usually that's the app: large, with a custom title bar. When Explorer
+   started the app to open a locked item (`--open`), it's a small window
+   with Windows' title bar and only the password dialog (below).
 5. **UI.** It starts the UI. `AppGate` shows setup, the lock screen or the
    home shell, depending on the session state.
 
@@ -80,6 +83,13 @@ Launch arguments are `--open "<vault>"`, `--lock "<path>"` and
 `LaunchIntentHandler` widget runs them one at a time:
 
 - `--open` asks for the vault's password, even while the app is locked.
+  When the app isn't showing (Explorer started it for this, or it runs in
+  the notification area), the window shows only that dialog, small, and
+  hides afterwards. An app that Explorer started just for this then quits,
+  unless it has an open drive to serve, or unlocked items to remind about
+  from the notification area. It never stays hidden without the icon: an
+  open drive then shows the app. Anything that needs more (setup, a
+  `--lock`) shows the app too.
 - `--lock` protects a new item (the protect dialog), or locks a listed
   unlocked item again without asking (the user chose it in Explorer).
 - `--unlock` unlocks a listed item.
@@ -485,7 +495,9 @@ recovery key.
   there, call `AllowSetForegroundWindow` and exit.
 - **Window.** The runner doesn't show the window by itself. Dart shows it
   after the first frame, so there is no white flash. The title bar is
-  custom-drawn with `window_manager`.
+  custom-drawn with `window_manager`. For a password request from
+  Explorer, the same window turns small and fixed, with Windows' title bar
+  (`NativeAppWindow`), and back when the app is shown.
 
 ## 8. Security model
 
