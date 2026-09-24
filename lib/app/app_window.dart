@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -103,7 +103,10 @@ class WindowController extends Notifier<WindowState> {
     }
     _inBackground = false;
     if (inApp) state = const WindowState(mode: WindowMode.request);
-    await _window.show(compact: true);
+    await _window.show(
+      compact: true,
+      over: intent is LockAgainIntent ? intent.over : null,
+    );
   }
 
   /// The small window's request is done. The next one uses the same
@@ -185,8 +188,10 @@ class WindowController extends Notifier<WindowState> {
 /// resizable, with the app's own title bar), or compact (the size of a
 /// dialog, with Windows' title bar).
 abstract interface class AppWindow {
-  /// Shows the window with that look, in front.
-  Future<void> show({required bool compact});
+  /// Shows the window with that look, in front, even while another app
+  /// has the focus. A compact window shows centered [over] that area of
+  /// the screen (physical pixels), if given.
+  Future<void> show({required bool compact, Rect? over});
 
   /// Changes the look, without bringing the window forward.
   Future<void> restyle({required bool compact});
@@ -204,7 +209,7 @@ class NoAppWindow implements AppWindow {
   const NoAppWindow();
 
   @override
-  Future<void> show({required bool compact}) async {}
+  Future<void> show({required bool compact, Rect? over}) async {}
 
   @override
   Future<void> restyle({required bool compact}) async {}
@@ -268,10 +273,18 @@ class NativeAppWindow with WindowListener implements AppWindow {
   }
 
   @override
-  Future<void> show({required bool compact}) async {
+  Future<void> show({required bool compact, Rect? over}) async {
     await _ready.future;
     if (await windowManager.isMinimized()) await windowManager.restore();
     await restyle(compact: compact);
+    if (compact && over != null) {
+      await _native('placeOver', [
+        over.left.round(),
+        over.top.round(),
+        over.right.round(),
+        over.bottom.round(),
+      ]);
+    }
     await _front();
   }
 
@@ -347,5 +360,22 @@ class NativeAppWindow with WindowListener implements AppWindow {
     if (await windowManager.isMinimized()) await windowManager.restore();
     await windowManager.show();
     await windowManager.focus();
+    // Windows lets only the app in front bring a window forward; the
+    // runner gets around that (a question the user expects right now).
+    await _native('toFront');
+  }
+
+  /// What window_manager can't do, from the Windows runner
+  /// (`windows/runner/flutter_window.cpp`). Nothing elsewhere.
+  static const MethodChannel _channel = MethodChannel('cloak/window');
+
+  Future<void> _native(String method, [Object? arguments]) async {
+    try {
+      await _channel.invokeMethod<Object?>(method, arguments);
+    } on MissingPluginException {
+      // Not Windows.
+    } on PlatformException {
+      // It stays where window_manager put it.
+    }
   }
 }

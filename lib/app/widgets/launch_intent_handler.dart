@@ -10,7 +10,6 @@ import '../../core/widgets/feedback.dart';
 import '../../features/auth/application/session_controller.dart';
 import '../../features/items/application/folder_window_watcher.dart';
 import '../../features/items/application/protection_controller.dart';
-import '../../features/items/domain/protected_item.dart';
 import '../../features/items/presentation/item_actions.dart';
 import '../../features/shell/application/launch_intents.dart';
 import '../app_window.dart';
@@ -37,7 +36,7 @@ class LaunchIntentHandler extends ConsumerStatefulWidget {
 class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
   bool _handling = false;
   final Set<String> _waitingNotified = {};
-  StreamSubscription<ProtectedItem>? _closed;
+  StreamSubscription<FolderClosed>? _closed;
 
   @override
   void initState() {
@@ -54,12 +53,17 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
 
   /// Once per closed folder: it may have closed again while the question
   /// waited.
-  void _askToLock(ProtectedItem item) {
+  void _askToLock(FolderClosed closed) {
+    final FolderClosed(:item, :window) = closed;
     final intents = ref.read(launchIntentsProvider.notifier);
     final waiting = ref
         .read(launchIntentsProvider)
         .any((intent) => intent is LockAgainIntent && intent.itemId == item.id);
-    if (!waiting) intents.add(LockAgainIntent(item.itemPath, itemId: item.id));
+    if (!waiting) {
+      intents.add(
+        LockAgainIntent(item.itemPath, itemId: item.id, over: window),
+      );
+    }
   }
 
   void _schedule() =>

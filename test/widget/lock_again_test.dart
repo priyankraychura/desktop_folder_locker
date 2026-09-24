@@ -66,6 +66,31 @@ void main() {
     await app.shutdown(tester);
   });
 
+  testWidgets('asks as Explorer tells the window closed, over that window', (
+    tester,
+  ) async {
+    final app = await desktopHarness(tester, initialWindow: startedByExplorer);
+    app.explorer.watches = true;
+    final vault = await lockedFolder(tester, app);
+    openFromExplorer(app, vault);
+    await tester.pumpWidget(app.app);
+    await settleReal(tester);
+    await unlockInDialog(tester);
+    final folder = app.userPath('Taxes');
+    const window = Rect.fromLTRB(200, 150, 1000, 750);
+
+    app.explorer.change([folder]);
+    await settleReal(tester);
+    expect(find.text('Lock “Taxes” again?'), findsNothing);
+    app.explorer.change([], window: window);
+    await settleReal(tester);
+    expect(find.text('Lock “Taxes” again?'), findsOneWidget);
+    expect(app.window.look, 'compact');
+    expect(app.window.shownOver, window);
+
+    await app.shutdown(tester);
+  });
+
   testWidgets('“Not now” keeps it unlocked; it asks again next time', (
     tester,
   ) async {

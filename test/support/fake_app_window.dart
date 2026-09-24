@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:desktop_folder_locker/app/app_window.dart';
 
 /// Stands in for the app's window: records how it shows.
@@ -12,9 +14,13 @@ class FakeAppWindow implements AppWindow {
   /// Whether the app was closed.
   bool ended = false;
 
+  /// The area it last showed over.
+  Rect? shownOver;
+
   @override
-  Future<void> show({required bool compact}) async {
+  Future<void> show({required bool compact, Rect? over}) async {
     visible = true;
+    shownOver = over;
     await restyle(compact: compact);
   }
 

@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_info.dart';
@@ -65,10 +67,19 @@ final class UnlockPathIntent extends LaunchIntent {
 /// last Explorer window [closed] (see `FolderWindowWatcher`), or it needs
 /// a password to lock ("Lock all" in the notification area).
 final class LockAgainIntent extends LaunchIntent {
-  const LockAgainIntent(super.path, {required this.itemId, this.closed = true});
+  const LockAgainIntent(
+    super.path, {
+    required this.itemId,
+    this.closed = true,
+    this.over,
+  });
 
   final String itemId;
   final bool closed;
+
+  /// Where the Explorer window that closed was on the screen (physical
+  /// pixels): the question shows over it, if it shows in its own window.
+  final Rect? over;
 
   @override
   bool get dialogOnly => true;

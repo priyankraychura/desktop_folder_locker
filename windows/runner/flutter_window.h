@@ -4,8 +4,11 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 
+#include <flutter/method_channel.h>
+
 #include <memory>
 
+#include "explorer_watcher.h"
 #include "tray_icon.h"
 #include "win32_window.h"
 
@@ -32,6 +35,18 @@ class FlutterWindow : public Win32Window {
 
   // The notification-area icon, controlled from Dart.
   std::unique_ptr<TrayIcon> tray_icon_;
+
+  // The folders Explorer shows, told to Dart as they change.
+  std::unique_ptr<ExplorerWatcher> explorer_watcher_;
+
+  // What window_manager can't do, for Dart ("cloak/window"):
+  //   placeOver [left, top, right, bottom]  centers the window over that
+  //       area (physical pixels, as ExplorerWatcher tells it), inside the
+  //       work area of its screen
+  //   toFront  brings the window to the front even though another app has
+  //       the focus, as a question the user expects right now should
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
+      window_channel_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_
