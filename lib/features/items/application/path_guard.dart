@@ -29,11 +29,17 @@ class PathGuard {
     required this.appDataDir,
     required this.executableDir,
     Map<String, String>? environment,
+    this.userFolders = const [],
   }) : _env = environment ?? Platform.environment;
 
   final String appDataDir;
   final String executableDir;
   final Map<String, String> _env;
+
+  /// More folders that may not be locked themselves (but their contents
+  /// may): the user's main folders where Windows really keeps them, and
+  /// every account's profile folder (see `UserFolders`).
+  final List<String> userFolders;
 
   static const List<String> _userFolderNames = [
     '3D Objects',
@@ -91,11 +97,19 @@ class PathGuard {
         p.join('$systemDrive\\', 'Users'),
         p.join('$systemDrive\\', 'Users', 'Public'),
       ],
+      ...userFolders,
     ];
   }
 
   PathProblem? check(String path, List<ProtectedItem> items) {
     final normalized = p.normalize(path);
+    // By name, so hidden system folders count even if they can't be seen.
+    final parts = p.split(normalized);
+    if (_systemNames.contains(parts.last.toLowerCase()) ||
+        // Anything in a drive's `$Recycle.Bin`, `System Volume Information`…
+        (parts.length > 1 && _systemNames.contains(parts[1].toLowerCase()))) {
+      return PathProblem.systemLocation;
+    }
     final type = FileSystemEntity.typeSync(normalized, followLinks: false);
     if (type == FileSystemEntityType.notFound) return PathProblem.notFound;
     if (type == FileSystemEntityType.link) return PathProblem.isLink;
@@ -109,9 +123,6 @@ class PathGuard {
             .split(normalized)
             .any((part) => part.toLowerCase().endsWith(DriveVault.extension))) {
       return PathProblem.isVault;
-    }
-    if (_systemNames.contains(p.basename(normalized).toLowerCase())) {
-      return PathProblem.systemLocation;
     }
 
     for (final root in [appDataDir, executableDir]) {

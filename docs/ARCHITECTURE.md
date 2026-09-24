@@ -414,10 +414,15 @@ removes the old app's files and shortcuts when it updates it.
 JSON files are written safely, so a crash never leaves half a file:
 
 1. The app writes `file.tmp` and flushes it to disk.
-2. It keeps the previous version as `file.bak`.
-3. It renames the temp file into place.
+2. It copies the previous version to `file.bak`.
+3. It renames the temp file over the original, in one step. The file is
+   never missing, not even for a moment: the Explorer plug-in reads
+   `items.json` as soon as it changes, and would otherwise see an empty
+   list.
 
-If the main file is missing or damaged, the app reads the backup.
+When another program (an antivirus, the search indexer) briefly holds the
+file, each step is tried again a few times. If the main file is damaged,
+the app reads the backup.
 
 The vaults themselves are self-contained. If `items.json` is lost, you can
 still open any vault by double-clicking it and typing its password or the

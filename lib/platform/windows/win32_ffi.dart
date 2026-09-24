@@ -11,6 +11,7 @@ abstract final class Win32 {
   static final DynamicLibrary _kernel32 = DynamicLibrary.open('kernel32.dll');
   static final DynamicLibrary _shell32 = DynamicLibrary.open('shell32.dll');
   static final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
+  static final DynamicLibrary _ole32 = DynamicLibrary.open('ole32.dll');
 
   static const int invalidFileAttributes = 0xFFFFFFFF;
 
@@ -54,6 +55,34 @@ abstract final class Win32 {
         Void Function(Int32, Uint32, Pointer<Void>, Pointer<Void>),
         void Function(int, int, Pointer<Void>, Pointer<Void>)
       >('SHChangeNotify');
+
+  static final int Function(
+    Pointer<Uint8>,
+    int,
+    Pointer<Void>,
+    Pointer<Pointer<Utf16>>,
+  )
+  _shGetKnownFolderPath = _shell32
+      .lookupFunction<
+        Int32 Function(
+          Pointer<Uint8>,
+          Uint32,
+          Pointer<Void>,
+          Pointer<Pointer<Utf16>>,
+        ),
+        int Function(
+          Pointer<Uint8>,
+          int,
+          Pointer<Void>,
+          Pointer<Pointer<Utf16>>,
+        )
+      >('SHGetKnownFolderPath');
+
+  static final void Function(Pointer<Void>) _coTaskMemFree = _ole32
+      .lookupFunction<
+        Void Function(Pointer<Void>),
+        void Function(Pointer<Void>)
+      >('CoTaskMemFree');
 
   static final int Function(int) _allowSetForegroundWindow = _user32
       .lookupFunction<Int32 Function(Uint32), int Function(int)>(
@@ -116,6 +145,46 @@ abstract final class Win32 {
           : shcnfPathW | shcnfFlushNoWait;
       _shChangeNotify(event, flags, first, second);
     });
+  }
+
+  /// `KF_FLAG_DONT_VERIFY`: don't check that the folder exists, so a
+  /// folder redirected to a network share that is offline can't stall.
+  static const int _kfFlagDontVerify = 0x00004000;
+
+  /// Where the known folder [folderId] (a `FOLDERID_…` GUID such as
+  /// `FDD39AD0-238F-46AF-ADB4-6C85480369C7`) is for the current user,
+  /// wherever it was moved; `null` if it has none.
+  static String? knownFolderPath(String folderId) => using((arena) {
+    final id = arena<Uint8>(16);
+    final bytes = _guidBytes(folderId);
+    for (var i = 0; i < 16; i++) {
+      id[i] = bytes[i];
+    }
+    final path = arena<Pointer<Utf16>>();
+    final result = _shGetKnownFolderPath(id, _kfFlagDontVerify, nullptr, path);
+    try {
+      return result == 0 ? path.value.toDartString() : null;
+    } finally {
+      // Freed even on failure, as the documentation asks.
+      _coTaskMemFree(path.value.cast());
+    }
+  });
+
+  /// The 16 bytes of a GUID: the first three groups are little-endian.
+  static List<int> _guidBytes(String guid) {
+    final parts = guid.split('-');
+    int part(int index) => int.parse(parts[index], radix: 16);
+    final data1 = part(0);
+    final data2 = part(1);
+    final data3 = part(2);
+    final data4 = parts[3] + parts[4];
+    return [
+      for (var shift = 0; shift < 32; shift += 8) (data1 >> shift) & 0xFF,
+      for (var shift = 0; shift < 16; shift += 8) (data2 >> shift) & 0xFF,
+      for (var shift = 0; shift < 16; shift += 8) (data3 >> shift) & 0xFF,
+      for (var i = 0; i < 16; i += 2)
+        int.parse(data4.substring(i, i + 2), radix: 16),
+    ];
   }
 
   /// `ASFW_ANY`: lets any process bring its window to the foreground.
