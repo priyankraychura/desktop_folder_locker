@@ -177,6 +177,11 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     return null;
   }
 
+  /// Keeps [masterKey] for [item], so it can be locked again while the app
+  /// is locked. The key belongs to the cache from now on.
+  void rememberMasterKey(ProtectedItem item, DerivedKey masterKey) =>
+      _cache.put(item.id, masterKey, KeySlotType.masterPassword);
+
   LockRequirement lockRequirement(ProtectedItem item) {
     // Closing a drive needs no key.
     if (!item.method.encrypts || item.isMounted) return LockRequirement.none;

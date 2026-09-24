@@ -43,6 +43,9 @@ class SettingsController extends Notifier<AppSettings> {
   Future<void> setKeepRunningInTray(bool value) =>
       _update(state.copyWith(keepRunningInTray: value));
 
+  Future<void> setAskToLockWhenClosed(bool value) =>
+      _update(state.copyWith(askToLockWhenClosed: value));
+
   Future<void> setRemindAfterMinutes(int minutes) =>
       _update(state.copyWith(remindAfterMinutes: minutes));
 

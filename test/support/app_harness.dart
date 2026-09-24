@@ -20,6 +20,7 @@ import 'fake_access_rules.dart';
 import 'fake_app_window.dart';
 import 'fake_dokany_installer.dart';
 import 'fake_drive_service.dart';
+import 'fake_explorer_folders.dart';
 import 'fake_system_tray.dart';
 
 /// Runs the real app against a temporary data folder, with cheap password
@@ -34,6 +35,7 @@ class AppHarness {
     this.dokanyInstaller,
     this.window,
     this.started,
+    this.explorer,
   );
 
   final Directory root;
@@ -54,6 +56,9 @@ class AppHarness {
   /// Stands in for the app's window.
   final FakeAppWindow window;
 
+  /// Stands in for Explorer's windows.
+  final FakeExplorerFolders explorer;
+
   /// Programs the app started (like Explorer, to show a folder), which
   /// don't really start in tests.
   final List<List<String>> started;
@@ -73,6 +78,7 @@ class AppHarness {
     drives ??= FakeDriveService();
     final dokanyInstaller = FakeDokanyInstaller();
     final window = FakeAppWindow(visible: windowVisible);
+    final explorer = FakeExplorerFolders();
     final started = <List<String>>[];
     ShellActions.start = (executable, args) async {
       started.add([executable, ...args]);
@@ -96,6 +102,7 @@ class AppHarness {
         dokanyInstallerProvider.overrideWithValue(dokanyInstaller),
         initialWindowStateProvider.overrideWithValue(initialWindow),
         appWindowProvider.overrideWithValue(window),
+        explorerFoldersProvider.overrideWithValue(explorer),
       ],
       retry: (_, _) => null,
     );
@@ -108,6 +115,7 @@ class AppHarness {
       dokanyInstaller,
       window,
       started,
+      explorer,
     );
   }
 

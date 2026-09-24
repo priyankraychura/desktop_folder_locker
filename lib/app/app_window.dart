@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import '../core/constants/app_info.dart';
 import '../core/di/core_providers.dart';
 import '../features/items/application/items_controller.dart';
+import '../features/items/application/protection_controller.dart';
 import '../features/settings/application/settings_controller.dart';
 import '../features/shell/application/launch_intents.dart';
 
@@ -17,7 +18,8 @@ enum WindowMode {
   main,
 
   /// Only a dialog, in a small window: when Explorer asks to open a locked
-  /// item and the app isn't open, that's all there is to show.
+  /// item, or the app asks whether to lock a closed folder again, and the
+  /// app isn't open, that's all there is to show.
   request,
 }
 
@@ -30,8 +32,8 @@ class WindowState {
 
   final WindowMode mode;
 
-  /// Explorer started the app for the request, the user didn't: it quits
-  /// when the request is done, unless something needs it.
+  /// Explorer started the app for the request, the user didn't: it may
+  /// quit right after it, so it shows no notification-area icon yet.
   final bool startedForRequest;
 }
 
@@ -47,65 +49,108 @@ final windowStateProvider = NotifierProvider<WindowController, WindowState>(
   WindowController.new,
 );
 
-/// Decides how the window shows: the app, or just the dialog that
-/// Explorer asked for.
+/// Decides how the window shows: the app, or just a dialog. Also decides
+/// when the app runs in the background, in the notification area: only
+/// while it has something to look after. Then it quits.
 class WindowController extends Notifier<WindowState> {
   @override
-  WindowState build() => ref.read(initialWindowStateProvider);
+  WindowState build() {
+    ref
+      ..listen(itemsControllerProvider, (_, _) => _quitIfDone())
+      ..listen(protectionControllerProvider, (_, _) => _quitIfDone());
+    return ref.read(initialWindowStateProvider);
+  }
 
   AppWindow get _window => ref.read(appWindowProvider);
+
+  /// The window is hidden and the app runs in the notification area.
+  bool _inBackground = false;
+  bool _quitting = false;
 
   /// Shows the app (from the notification area, the Start menu…). The user
   /// is using it now, so it stays when a request is done.
   Future<void> showMain() async {
+    _inBackground = false;
     state = const WindowState();
     await _window.showMain();
   }
 
-  /// Shows the window for [intent]. Opening a locked item needs only its
-  /// password dialog, so it gets the small window, unless the app is open
-  /// anyway; everything else needs the app.
+  /// Shows the window for [intent]. A dialog-only request gets the small
+  /// window, unless the app is open anyway; everything else needs the app.
   Future<void> present(LaunchIntent? intent) async {
     final inApp = state.mode == WindowMode.main;
-    if (intent is! OpenVaultIntent || (inApp && await _window.isVisible())) {
+    if (intent == null ||
+        !intent.dialogOnly ||
+        (inApp && await _window.isVisible())) {
       return showMain();
     }
+    _inBackground = false;
     if (inApp) state = const WindowState(mode: WindowMode.request);
     await _window.showRequest();
   }
 
   /// The small window's request is done. The next one uses the same
-  /// window, and requests that need the app get it. Otherwise the app
-  /// quits if Explorer started it just for this and nothing needs it, or
-  /// goes to the notification area.
+  /// window, and requests that need the app get it. Otherwise the app goes
+  /// to the notification area, or quits if it has nothing to look after.
   Future<void> finishRequest() async {
     if (state.mode != WindowMode.request) return;
     final pending = ref.read(launchIntentsProvider);
-    if (pending.any((intent) => intent is OpenVaultIntent)) return;
+    if (pending.any((intent) => intent.dialogOnly)) return;
     if (pending.isNotEmpty) return showMain();
-    final inTray =
-        ref.read(settingsControllerProvider).keepRunningInTray &&
-        ref.read(systemTrayProvider).isAvailable;
-    if (state.startedForRequest && !_needed(inTray: inTray)) {
+    if (!_needed()) {
       await _window.hide();
-      // Quit as it is, or the notification-area icon shows for a moment.
-      return _window.quit();
+      return _quit();
     }
     // Hidden without the icon, there'd be no way back to the app.
-    if (!inTray) return showMain();
+    if (!_inTray) return showMain();
     await _window.hide();
+    _inBackground = true;
     state = const WindowState();
   }
 
+  /// Whether the app can go on in the notification area when the user
+  /// closes its window: with the icon, while it has something to look
+  /// after. Otherwise it quits.
+  bool get canRunInBackground => _inTray && _needed();
+
+  /// Hides the window: the app goes on in the notification area.
+  Future<void> toBackground() async {
+    await _window.hide();
+    _inBackground = true;
+  }
+
+  bool get _inTray =>
+      ref.read(settingsControllerProvider).keepRunningInTray &&
+      ref.read(systemTrayProvider).isAvailable;
+
   /// Open drives need the app, which serves them. Unlocked items need it
-  /// when it runs in the notification area, to remind about them.
-  bool _needed({required bool inTray}) {
+  /// when it runs in the notification area, to remind about them and ask
+  /// to lock them again.
+  bool _needed() {
     final items = ref.read(itemsControllerProvider.notifier);
     if (items.items.any((item) => item.isMounted)) return true;
-    return inTray &&
+    return _inTray &&
         items.items.any(
           (item) => !item.isProtected && items.existsOnDisk(item),
         );
+  }
+
+  /// In the background, the app quits once it has nothing left to look
+  /// after: everything is locked again, and nothing is going on.
+  void _quitIfDone() {
+    if (!_inBackground ||
+        ref.read(protectionControllerProvider) != null ||
+        ref.read(launchIntentsProvider).isNotEmpty ||
+        _needed()) {
+      return;
+    }
+    unawaited(_quit());
+  }
+
+  Future<void> _quit() async {
+    if (_quitting) return;
+    _quitting = true;
+    await _window.quit();
   }
 }
 
@@ -233,8 +278,12 @@ class NativeAppWindow implements AppWindow {
     await windowManager.hide();
   }
 
+  /// Once the window was shown first.
   @override
-  Future<bool> isVisible() => windowManager.isVisible();
+  Future<bool> isVisible() async {
+    await _ready.future;
+    return windowManager.isVisible();
+  }
 
   @override
   Future<void> quit() => windowManager.destroy();

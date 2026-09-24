@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 import '../core/di/core_providers.dart';
 import '../core/storage/app_paths.dart';
@@ -11,6 +12,8 @@ import '../engine/crypto/crypto_service.dart';
 import '../features/settings/application/settings_controller.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/shell/application/launch_intents.dart';
+import '../platform/explorer_folders.dart';
+import '../platform/explorer_integration.dart';
 import '../platform/single_instance.dart';
 import '../platform/system_tray.dart';
 import 'app.dart';
@@ -39,7 +42,7 @@ Future<void> bootstrap(List<String> args) async {
 
   final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   final startWithRequest =
-      isDesktop && LaunchIntent.parse(args) is OpenVaultIntent;
+      isDesktop && (LaunchIntent.parse(args)?.dialogOnly ?? false);
   final window = isDesktop
       ? NativeAppWindow(startWithRequest: startWithRequest)
       : null;
@@ -54,8 +57,17 @@ Future<void> bootstrap(List<String> args) async {
       executablePathProvider.overrideWithValue(Platform.resolvedExecutable),
       nativeWindowProvider.overrideWithValue(isDesktop),
       initialSettingsProvider.overrideWithValue(settings),
-      if (Platform.isWindows)
+      if (Platform.isWindows) ...[
         systemTrayProvider.overrideWithValue(NativeSystemTray()),
+        explorerFoldersProvider.overrideWithValue(
+          NativeExplorerFolders(
+            p.join(
+              p.dirname(Platform.resolvedExecutable),
+              ExplorerIntegration.pluginFileName,
+            ),
+          ),
+        ),
+      ],
       initialWindowStateProvider.overrideWithValue(
         startWithRequest
             ? const WindowState(

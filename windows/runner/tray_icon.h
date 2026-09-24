@@ -18,19 +18,26 @@
 //   notify {title, body}
 // and is told about "activate" (click on the icon or on a notification)
 // and "menuItem" (the id of the chosen menu entry).
+//
+// The icon has a hidden window of its own, which gets its messages and
+// owns its menu: the menu needs its owner in the foreground, and that
+// mustn't bring the app's window forward.
 class TrayIcon {
  public:
-  TrayIcon(HWND window, flutter::BinaryMessenger* messenger);
+  explicit TrayIcon(flutter::BinaryMessenger* messenger);
   ~TrayIcon();
 
   TrayIcon(const TrayIcon&) = delete;
   TrayIcon& operator=(const TrayIcon&) = delete;
 
-  // Handles tray messages sent to |window|. Returns true when the message
+ private:
+  static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wparam,
+                                     LPARAM lparam);
+
+  // Handles a message of the icon's window. Returns true when the message
   // was consumed.
   bool HandleMessage(UINT message, WPARAM wparam, LPARAM lparam);
 
- private:
   struct MenuItem {
     std::string id;
     std::wstring label;
@@ -48,7 +55,7 @@ class TrayIcon {
   void ShowMenu(int x, int y);
   NOTIFYICONDATAW BaseData() const;
 
-  HWND window_;
+  HWND window_ = nullptr;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
   std::vector<MenuItem> menu_;
   std::wstring tooltip_;

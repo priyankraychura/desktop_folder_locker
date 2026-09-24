@@ -108,9 +108,10 @@ that are left unlocked.
 | # | Milestone | What it contains | Status |
 |---|-----------|------------------|--------|
 | 1.1a | Block access and Read-only | An NTFS "deny Everyone" permission rule on the item, in place and instant. Only on items the user owns, on drives with permissions. Unlock removes exactly that rule. | ✅ rules tested on real NTFS in CI · 🧪 Explorer behaviour |
-| 1.1b | Notification-area icon | Native tray icon in the Windows runner: menu (open, lock all items, lock app, quit), amber icon while items are unlocked, keeps running when the window is closed | 🧪 |
+| 1.1b | Notification-area icon | Native tray icon in the Windows runner: menu (open, lock the unlocked items, lock app, quit), amber icon while items are unlocked, keeps running when the window is closed while items are unlocked, and quits once everything is locked | 🧪 |
 | 1.1c | Reminders and automatic re-locking | A notification when items stay unlocked; lock them again after N minutes; lock them when the app locks | ✅ |
 | 1.1d | New recovery key | Shown once and confirmed; every vault is re-sealed crash-safely; vaults that could not be reached are finished after the next unlock | ✅ |
+| 1.1e | Ask to lock when closed | When the last Explorer window of an unlocked folder (or drive) closes, a small dialog asks to lock it again; the app lists Explorer's windows through the Explorer plug-in | ✅ logic, UI and a real Explorer window in CI · 🧪 on a real PC |
 
 **Limits of Block access and Read-only**
 
@@ -129,13 +130,20 @@ that are left unlocked.
    fails. **Unlock** → it can be changed again.
 3. Right-click the blocked folder → **Lock with Folder Locker** → the app
    offers to unlock it.
-4. Close the window → it disappears, and the icon stays next to the clock
-   (a one-time notification explains this). Unlock an item → the icon gets
-   the amber dot. Right-click the icon → **Lock all items**.
+4. With everything locked, close the window → the app quits. Unlock an
+   item and close the window → it disappears, and the icon stays next to
+   the clock with the amber dot (a one-time notification explains this).
+   Right-click the icon → the app's window doesn't come up; **Lock
+   “Name”** locks the item, and the app quits.
 5. Set **Remind me** to 15 minutes, unlock an item and close the window → a
    notification appears after 15 minutes. Click it → the window opens.
 6. **Settings → Recovery key → New key…** → save the key → *Forgot
    password?* on the lock screen accepts only the new key.
+7. Close the app. Double-click a vault and unlock it → the folder opens in
+   Explorer. Close that Explorer window → a small dialog asks **Lock
+   “Name” again?** → **Lock** → the vault is back, and the app quits
+   (nothing left in Task Manager). **Not now** keeps it unlocked; it asks
+   again the next time its window closes.
 
 ## Phase 2: open vaults as a virtual drive (Dokany) 🧪
 

@@ -3,11 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_info.dart';
 import '../../../engine/vault/drive_vault.dart';
 
-/// Something Explorer asked the app to do through command-line arguments.
+/// Something Explorer asked the app to do through command-line arguments,
+/// or, from the app itself, a question about a folder the user closed.
 sealed class LaunchIntent {
   const LaunchIntent(this.path);
 
   final String path;
+
+  /// Needs only a dialog, which can show without the app (see
+  /// `WindowController`), even while the app is locked.
+  bool get dialogOnly => false;
 
   /// Parses `--open <vault>`, `--lock <path>` and `--unlock <path>`.
   static LaunchIntent? parse(List<String> args) {
@@ -39,6 +44,9 @@ sealed class LaunchIntent {
 /// A vault was double-clicked in Explorer: ask for its password.
 final class OpenVaultIntent extends LaunchIntent {
   const OpenVaultIntent(super.path);
+
+  @override
+  bool get dialogOnly => true;
 }
 
 /// "Lock with Folder Locker" was chosen in Explorer: protect a new item,
@@ -53,10 +61,23 @@ final class UnlockPathIntent extends LaunchIntent {
   const UnlockPathIntent(super.path);
 }
 
+/// Lock the unlocked item [itemId] (at [path]) again, after asking: its
+/// last Explorer window [closed] (see `FolderWindowWatcher`), or it needs
+/// a password to lock ("Lock all" in the notification area).
+final class LockAgainIntent extends LaunchIntent {
+  const LockAgainIntent(super.path, {required this.itemId, this.closed = true});
+
+  final String itemId;
+  final bool closed;
+
+  @override
+  bool get dialogOnly => true;
+}
+
 final launchIntentsProvider =
     NotifierProvider<LaunchIntents, List<LaunchIntent>>(LaunchIntents.new);
 
-/// Queue of requests from Explorer, handled one at a time by the UI.
+/// Queue of requests, handled one at a time by the UI.
 class LaunchIntents extends Notifier<List<LaunchIntent>> {
   @override
   List<LaunchIntent> build() => const [];

@@ -190,6 +190,19 @@ class SettingsPage extends ConsumerWidget {
           title: 'Unlocked items',
           children: [
             SettingsRow(
+              icon: Icons.folder_off_outlined,
+              tone: Tone.primary,
+              title: 'Ask when I close them',
+              subtitle:
+                  'When you close an unlocked folder or drive in Explorer, '
+                  'asks whether to lock it again.',
+              trailing: Switch(
+                value: settings.askToLockWhenClosed,
+                onChanged: (value) =>
+                    unawaited(controller.setAskToLockWhenClosed(value)),
+              ),
+            ),
+            SettingsRow(
               icon: Icons.notifications_active_outlined,
               tone: Tone.warning,
               title: 'Remind me',
@@ -286,9 +299,10 @@ class SettingsPage extends ConsumerWidget {
               tone: Tone.accent,
               title: 'Keep running in the notification area',
               subtitle: hasTray
-                  ? 'Closing the window keeps ${AppInfo.name} running with an '
-                        'icon next to the clock, so reminders and automatic '
-                        'locking keep working.'
+                  ? 'While items are unlocked, closing the window keeps '
+                        '${AppInfo.name} running with an icon next to the '
+                        'clock, so it can remind you and lock them. Once '
+                        'everything is locked, it quits.'
                   : 'Only available on Windows.',
               trailing: Switch(
                 value: hasTray && settings.keepRunningInTray,

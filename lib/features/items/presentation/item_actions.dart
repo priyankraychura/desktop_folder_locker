@@ -23,6 +23,7 @@ import '../../settings/application/settings_controller.dart';
 import '../application/items_controller.dart';
 import '../application/protection_controller.dart';
 import '../domain/protected_item.dart';
+import 'dialogs/lock_again_prompt.dart';
 import 'dialogs/protect_dialog.dart';
 import 'dialogs/unlock_dialog.dart';
 
@@ -36,6 +37,10 @@ class ItemActions {
 
   ProtectionController get _controller =>
       _ref.read(protectionControllerProvider.notifier);
+
+  /// Alone in the small window of a request (see [WindowController]): a
+  /// toast would go with the window, so messages are dialogs.
+  bool get _alone => _ref.read(windowStateProvider).mode == WindowMode.request;
 
   /// Lets the user pick a folder or file, then protects it.
   Future<void> pickAndProtect({required bool folder}) async {
@@ -141,7 +146,7 @@ class ItemActions {
         outcome = await _controller.unlock(item);
       } on Object catch (error) {
         if (!isWrongPassword(error)) {
-          _toastError(error);
+          await _showError(error);
           return;
         }
         // The remembered key no longer matches: ask for the password.
@@ -158,6 +163,32 @@ class ItemActions {
       );
     }
     if (outcome != null) _afterUnlock(outcome, open: open);
+  }
+
+  /// Locks the unlocked item [itemId] again, after asking: its last
+  /// Explorer window [closed], or ("Lock all" in the notification area) it
+  /// needs a password to lock.
+  Future<void> askToLockAgain(String itemId, {required bool closed}) async {
+    final items = _ref.read(itemsControllerProvider.notifier);
+    bool unlocked(ProtectedItem? item) =>
+        item != null && !item.isProtected && items.existsOnDisk(item);
+    final item = items.byId(itemId);
+    // Locked meanwhile, or gone.
+    if (!unlocked(item) || !_context.mounted) return;
+    final needsMaster =
+        _controller.lockRequirement(item!) == LockRequirement.appUnlock;
+    // Its own password is asked by the lock itself.
+    if (closed || needsMaster) {
+      final lock = await showLockAgainPrompt(
+        _context,
+        item: item,
+        closed: closed,
+        askMasterPassword: needsMaster,
+      );
+      if (!lock) return;
+    }
+    final current = items.byId(itemId);
+    if (unlocked(current)) await lockAgain(current!);
   }
 
   /// Applies the item's protection again.
@@ -258,7 +289,7 @@ class ItemActions {
         outcome = await _controller.decryptDrive(item);
       } on Object catch (error) {
         if (!isWrongPassword(error)) {
-          _toastError(error);
+          await _showError(error);
           return;
         }
       }
@@ -309,8 +340,7 @@ class ItemActions {
   Future<void> openVault(String vaultPath) async {
     vaultPath = DriveVault.folderOf(vaultPath);
     if (!FsUtils.exists(vaultPath)) {
-      // Alone in its small window, a toast would go with the window.
-      if (_ref.read(windowStateProvider).mode == WindowMode.request) {
+      if (_alone) {
         if (!_context.mounted) return;
         await showNoticeDialog(
           _context,
@@ -428,13 +458,22 @@ class ItemActions {
     try {
       await action();
     } on Object catch (error) {
-      _toastError(error);
+      await _showError(error);
     }
   }
 
-  void _toastError(Object error) {
+  Future<void> _showError(Object error) async {
     final cancelled =
         error is EngineException && error.code == EngineErrorCode.cancelled;
+    if (_alone && !cancelled && _context.mounted) {
+      return showNoticeDialog(
+        _context,
+        title: 'That didn’t work',
+        message: errorText(error),
+        icon: Icons.error_outline_rounded,
+        tone: Tone.danger,
+      );
+    }
     showToast(errorText(error), tone: cancelled ? Tone.neutral : Tone.danger);
   }
 }

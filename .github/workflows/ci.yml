@@ -102,7 +102,8 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       # The release build, as it ships: its COM objects, then end to end,
-      # registered for Explorer and shown and run by Windows' own menu code.
+      # registered for Explorer and shown and run by Windows' own menu code,
+      # and the folders that a real Explorer window shows.
       - name: Test the Explorer plug-in
         working-directory: native
         env:
@@ -115,9 +116,12 @@ jobs:
         run: cargo build --release -p folder-locker-drive -p folder-locker-shell
 
       # Also exercises the Windows code paths of the engine (NTFS renames,
-      # file attributes and free-space checks through FFI) and the app
-      # talking to the drive helper built above.
+      # file attributes and free-space checks through FFI), the app talking
+      # to the drive helper built above, and asking Explorer through the
+      # plug-in which folders it shows (in a real Explorer window).
       - name: Test
+        env:
+          FLK_SHELL_E2E: '1'
         run: flutter test
 
       - name: Build app

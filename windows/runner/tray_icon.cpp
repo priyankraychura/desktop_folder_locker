@@ -13,6 +13,7 @@ namespace {
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kTrayIconId = 1;
 constexpr char kChannelName[] = "folder_locker/tray";
+constexpr wchar_t kWindowClass[] = L"FolderLockerTrayWindow";
 
 std::wstring Utf16FromUtf8(const std::string& text) {
   if (text.empty()) {
@@ -69,11 +70,21 @@ HICON LoadIconResource(int id, int size_metric_x, int size_metric_y) {
 
 }  // namespace
 
-TrayIcon::TrayIcon(HWND window, flutter::BinaryMessenger* messenger)
-    : window_(window),
-      channel_(std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+TrayIcon::TrayIcon(flutter::BinaryMessenger* messenger)
+    : channel_(std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
           messenger, kChannelName,
           &flutter::StandardMethodCodec::GetInstance())) {
+  const HINSTANCE instance = ::GetModuleHandleW(nullptr);
+  WNDCLASSEXW window_class = {};
+  window_class.cbSize = sizeof(window_class);
+  window_class.lpfnWndProc = TrayIcon::WindowProc;
+  window_class.hInstance = instance;
+  window_class.lpszClassName = kWindowClass;
+  ::RegisterClassExW(&window_class);
+  // Top-level (never shown) rather than message-only: only top-level
+  // windows hear that Explorer restarted.
+  window_ = ::CreateWindowExW(WS_EX_TOOLWINDOW, kWindowClass, L"", WS_POPUP,
+                              0, 0, 0, 0, nullptr, nullptr, instance, this);
   taskbar_created_message_ = ::RegisterWindowMessageW(L"TaskbarCreated");
   normal_icon_ = LoadIconResource(IDI_APP_ICON, SM_CXSMICON, SM_CYSMICON);
   attention_icon_ =
@@ -88,11 +99,30 @@ TrayIcon::TrayIcon(HWND window, flutter::BinaryMessenger* messenger)
 TrayIcon::~TrayIcon() {
   channel_->SetMethodCallHandler(nullptr);
   Hide();
+  if (window_ != nullptr) {
+    ::SetWindowLongPtrW(window_, GWLP_USERDATA, 0);
+    ::DestroyWindow(window_);
+  }
   for (HICON icon : {normal_icon_, attention_icon_, large_icon_}) {
     if (icon != nullptr) {
       ::DestroyIcon(icon);
     }
   }
+}
+
+LRESULT CALLBACK TrayIcon::WindowProc(HWND window, UINT message, WPARAM wparam,
+                                      LPARAM lparam) {
+  if (message == WM_NCCREATE) {
+    const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lparam);
+    ::SetWindowLongPtrW(window, GWLP_USERDATA,
+                        reinterpret_cast<LONG_PTR>(create->lpCreateParams));
+  } else if (auto* tray = reinterpret_cast<TrayIcon*>(
+                 ::GetWindowLongPtrW(window, GWLP_USERDATA))) {
+    if (tray->HandleMessage(message, wparam, lparam)) {
+      return 0;
+    }
+  }
+  return ::DefWindowProcW(window, message, wparam, lparam);
 }
 
 bool TrayIcon::HandleMessage(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -241,7 +271,8 @@ void TrayIcon::ShowMenu(int x, int y) {
                     static_cast<UINT_PTR>(i + 1), item.label.c_str());
     }
   }
-  // Without this the menu would not close when clicking elsewhere.
+  // Without this the menu would not close when clicking elsewhere. The
+  // icon's own window stays hidden, and the app's window where it is.
   ::SetForegroundWindow(window_);
   UINT flags = TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON;
   flags |= ::GetSystemMetrics(SM_MENUDROPALIGNMENT) != 0 ? TPM_RIGHTALIGN

@@ -8,19 +8,22 @@ import '../../core/theme/app_palette.dart';
 import '../../core/widgets/app_keys.dart';
 import '../../core/widgets/feedback.dart';
 import '../../features/auth/application/session_controller.dart';
+import '../../features/items/application/folder_window_watcher.dart';
 import '../../features/items/application/protection_controller.dart';
+import '../../features/items/domain/protected_item.dart';
 import '../../features/items/presentation/item_actions.dart';
 import '../../features/shell/application/launch_intents.dart';
 import '../app_window.dart';
 
 /// Handles requests from Explorer ("unlock this vault", "lock this
 /// folder", "unlock this folder") one at a time, as soon as the app is
-/// ready for them.
+/// ready for them. Asking whether to lock a folder again once its last
+/// Explorer window closed (see [FolderWindowWatcher]) is one too.
 ///
-/// Opening a vault works even while the app is locked (the vault's own
-/// password is asked), and shows just its dialog when the app isn't open
-/// (see [WindowController]); locking and unlocking items need the app to
-/// be unlocked first.
+/// Opening a vault and that question work even while the app is locked,
+/// and show just their dialog when the app isn't open (see
+/// [WindowController]); locking and unlocking items need the app to be
+/// unlocked first.
 class LaunchIntentHandler extends ConsumerStatefulWidget {
   const LaunchIntentHandler({required this.child, super.key});
 
@@ -34,11 +37,29 @@ class LaunchIntentHandler extends ConsumerStatefulWidget {
 class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
   bool _handling = false;
   final Set<String> _waitingNotified = {};
+  StreamSubscription<ProtectedItem>? _closed;
 
   @override
   void initState() {
     super.initState();
+    _closed = ref.read(folderWindowWatcherProvider).closed.listen(_askToLock);
     WidgetsBinding.instance.addPostFrameCallback((_) => _schedule());
+  }
+
+  @override
+  void dispose() {
+    unawaited(_closed?.cancel());
+    super.dispose();
+  }
+
+  /// Once per closed folder: it may have closed again while the question
+  /// waited.
+  void _askToLock(ProtectedItem item) {
+    final intents = ref.read(launchIntentsProvider.notifier);
+    final waiting = ref
+        .read(launchIntentsProvider)
+        .any((intent) => intent is LockAgainIntent && intent.itemId == item.id);
+    if (!waiting) intents.add(LockAgainIntent(item.itemPath, itemId: item.id));
   }
 
   void _schedule() =>
@@ -63,7 +84,7 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
 
     final intents = ref.read(launchIntentsProvider.notifier);
     final intent = intents.take(
-      (intent) => intent is OpenVaultIntent || session.isUnlocked,
+      (intent) => intent.dialogOnly || session.isUnlocked,
     );
     if (intent == null) {
       _notifyWaiting();
@@ -83,6 +104,8 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
           await actions.lockPath(path);
         case UnlockPathIntent(:final path):
           await actions.unlockPath(path);
+        case LockAgainIntent(:final itemId, :final closed):
+          await actions.askToLockAgain(itemId, closed: closed);
       }
     } finally {
       _handling = false;
@@ -109,7 +132,7 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
   static String? _verb(LaunchIntent intent) => switch (intent) {
     LockPathIntent() => 'lock',
     UnlockPathIntent() => 'unlock',
-    OpenVaultIntent() => null,
+    OpenVaultIntent() || LockAgainIntent() => null,
   };
 
   @override

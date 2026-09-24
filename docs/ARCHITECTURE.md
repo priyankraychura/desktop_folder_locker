@@ -85,16 +85,25 @@ Launch arguments are `--open "<vault>"`, `--lock "<path>"` and
 - `--open` asks for the vault's password, even while the app is locked.
   When the app isn't showing (Explorer started it for this, or it runs in
   the notification area), the window shows only that dialog, small, and
-  hides afterwards. An app that Explorer started just for this then quits,
-  unless it has an open drive to serve, or unlocked items to remind about
-  from the notification area. It never stays hidden without the icon: an
-  open drive then shows the app. Anything that needs more (setup, a
-  `--lock`) shows the app too.
+  hides afterwards. Anything that needs more (setup, a `--lock`) shows the
+  app.
 - `--lock` protects a new item (the protect dialog), or locks a listed
   unlocked item again without asking (the user chose it in Explorer).
 - `--unlock` unlocks a listed item.
 
-Locking and unlocking wait until the app is unlocked, and a toast says so.
+The app queues one request of its own, `LockAgainIntent`: the question
+whether to lock a folder again once its last Explorer window closed
+(section 5.2). Like `--open`, it needs only a dialog and works while the
+app is locked. Locking and unlocking wait until the app is unlocked, and
+a toast says so.
+
+The app runs in the background, in the notification area, only while it
+has something to look after: unlocked items, to remind about them and
+ask to lock them again (with the icon on), or open drives, which it
+serves (`WindowController`). Otherwise closing its window, or finishing
+a request, quits it, and in the background it quits once the last item
+is locked again. It never stays hidden without the icon: an open drive
+then shows the app.
 
 ## 3. Vault format (`.flk`, version 1)
 
@@ -322,6 +331,16 @@ These methods leave the item in place and add one Windows permission entry
     a file in use is retried after 5 minutes.
   - It reports items that have been unlocked longer than the reminder time,
     once per unlock.
+- `FolderWindowWatcher` asks Explorer every 2 seconds which folders its
+  windows and tabs show (through the plug-in, section 7), while a folder
+  is unlocked or a drive open. An item that a window showed (it, or a
+  folder inside it), and that no window shows any more, closed or
+  navigated away from, gets the question "Lock it again?", once until it
+  shows again. "Ask when I close them" in Settings turns this off.
+- Items unlocked with a typed password lock again without it: their key
+  stays in memory while they're unlocked (`ItemKeyCache`), even while the
+  app is locked. Locking the app wipes these keys, so an item unlocked
+  before that needs the master password again: the question asks for it.
 - `AppLocker` is the only way the app gets locked (sidebar, `Ctrl+L`, tray
   menu, auto-lock). With "Lock them when the app locks" on, it locks
   unlocked items first, while their keys are still in memory.
@@ -455,6 +474,12 @@ recovery key.
   build carries the Visual C++ runtime inside (`static_vcruntime`), so it
   doesn't depend on whichever `vcruntime140.dll` Explorer has loaded.
 
+  The app loads the DLL too, for one more export:
+  `FolderLockerShownFolders` lists the folders that Explorer windows and
+  tabs show (`IShellWindows`, and each window's current folder as a file
+  system path). Each call asks Explorer's process, so the app makes it in
+  another isolate, one at a time (`NativeExplorerFolders`).
+
   Windows 11's first menu level only shows commands from packages. The
   Windows 11 menu package (`installer/sparse`) is a package with external
   location: just a manifest and logos, pointing to the app's folder. It
@@ -488,15 +513,21 @@ recovery key.
     notification.
 
   Clicks and menu choices come back as `activate` and `menuItem`. The icon
-  is added again when Explorer restarts (`TaskbarCreated`). With "Keep
-  running in the notification area" on, closing the window only hides it.
+  has a hidden window of its own, which gets its messages and owns its
+  menu: the menu needs its owner in the foreground, and that mustn't bring
+  the app's window forward. The icon is added again when Explorer
+  restarts (`TaskbarCreated`). Its menu locks the unlocked items even
+  while the app is locked; those that need a password ask for it, one by
+  one. With "Keep running in the notification area" on, closing the
+  window only hides it while the app has something to look after
+  (section 2).
 - **Single instance.** The first copy holds an exclusive lock on
   `instance.lock` and watches `inbox/`. Later copies write their arguments
   there, call `AllowSetForegroundWindow` and exit.
 - **Window.** The runner doesn't show the window by itself. Dart shows it
   after the first frame, so there is no white flash. The title bar is
-  custom-drawn with `window_manager`. For a password request from
-  Explorer, the same window turns small and fixed, with Windows' title bar
+  custom-drawn with `window_manager`. For a request that needs only a
+  dialog, the same window turns small and fixed, with Windows' title bar
   (`NativeAppWindow`), and back when the app is shown.
 
 ## 8. Security model
@@ -543,10 +574,10 @@ independently audited**.
 | Folder | What it covers |
 |---|---|
 | `test/engine` | byte encoding, key slots, header A/B areas, archive paths, crypto; lock/unlock round trips with nested folders, Unicode names, chunk-boundary sizes and empty files; tamper and truncation detection; startup recovery of interrupted locks and unlocks; cancel; the isolate runner; the real drive helper (import, check, export, a wrong key) |
-| `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); drive items (with a fake helper): lock, open, close, drives in use, decrypt to a folder, restarts; reminders, automatic re-locking and locking items with the app; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
-| `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files; the Explorer entries with and without the plug-in, written under a test key (Windows only, run in CI) |
-| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove, and a drive's open, close and decrypt; the protect dialog's methods and "Open it as"; the Dokany row in Settings; the tray icon following the items and running its menu; Explorer's unlock and lock requests, and requests waiting for the app to be unlocked |
-| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)). The plug-in's choice of entry and badge for each kind of item; on Windows, its COM objects as Explorer uses them, and end to end: the entry registered, shown by Windows' own menu code (shell32) with the right title, and run; the badge registered, loaded by Windows' overlay code and shown only on protected items |
+| `test/features`, `test/core` | setup, unlock, change and reset of the master password; new recovery key and its later completion; custom-password items; hide-only, blocked and read-only items (with an in-memory stand-in for the permission rules); drive items (with a fake helper): lock, open, close, drives in use, decrypt to a folder, restarts; reminders, automatic re-locking and locking items with the app; which closed folders get the question to lock them again; the path guard; launch arguments; the old `items.json` format; JSON files with backup |
+| `test/platform` | real Windows permission entries on NTFS: block, read-only, replace and remove, on folders and files; the Explorer entries with and without the plug-in, written under a test key; the folders a real Explorer window shows, through the built plug-in (Windows only, run in CI) |
+| `test/widget` | full UI flows: setup → recovery key → home → lock/unlock app; item cards: unlock, lock again, remove, and a drive's open, close and decrypt; the protect dialog's methods and "Open it as"; the Dokany row in Settings; the tray icon following the items and running its menu; Explorer's unlock and lock requests, and requests waiting for the app to be unlocked; the small window for a request, the question to lock a closed folder again (with the master password when the app locked since), and the app ending once nothing is left |
+| `native/` (`cargo test`) | the drive vault format and the helper, on Linux and Windows; on Windows with Dokany, a drive mounted and used end to end ([DRIVE_VAULT.md §6](DRIVE_VAULT.md#6-tests)). The plug-in's choice of entry and badge for each kind of item; on Windows, its COM objects as Explorer uses them, and end to end: the entry registered, shown by Windows' own menu code (shell32) with the right title, and run; the badge registered, loaded by Windows' overlay code and shown only on protected items; the folders Explorer shows, with a real window opened and closed |
 | `test/visual` | renders every main screen to PNG (only when `SCREENSHOTS_DIR` is set) |
 
 The tests use cheap Argon2id settings (`KdfPolicy.fast`) and temporary
@@ -555,7 +586,7 @@ folders. On every push, CI runs:
 - on Linux: format checks, `flutter analyze`, Clippy, and the Rust and
   Flutter tests;
 - on Windows: Clippy, the plug-in's tests on its release build (end to
-  end in Explorer's menu code), the release helper and plug-in, the
+  end in Explorer's menu code, and with a real Explorer window), the release helper and plug-in, the
   Flutter tests, the release build and the installer, which is then
   installed, checked and uninstalled;
 - on Windows with Dokany installed: the drive end-to-end test.

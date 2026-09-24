@@ -15,6 +15,7 @@ import '../../features/items/application/protection_controller.dart';
 import '../../features/items/application/unlocked_items_watcher.dart';
 import '../../features/items/domain/protected_item.dart';
 import '../../features/settings/application/settings_controller.dart';
+import '../../features/shell/application/launch_intents.dart';
 import '../../features/shell/presentation/lock_app_action.dart';
 import '../../platform/system_tray.dart';
 import '../app_window.dart';
@@ -63,11 +64,12 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
     super.dispose();
   }
 
-  int get _unlockedCount {
+  List<ProtectedItem> get _unlocked {
     final items = ref.read(itemsControllerProvider.notifier);
-    return items.items
-        .where((item) => !item.isProtected && items.existsOnDisk(item))
-        .length;
+    return [
+      for (final item in items.items)
+        if (!item.isProtected && items.existsOnDisk(item)) item,
+    ];
   }
 
   /// Shows, updates or removes the icon to match the current state. While
@@ -85,25 +87,33 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
       return;
     }
     final appUnlocked = ref.read(sessionControllerProvider).isUnlocked;
-    final unlocked = _unlockedCount;
-    final key = '$unlocked/$appUnlocked';
+    final unlocked = _unlocked;
+    // Items unlocked from Explorer lock without the app: their key is kept
+    // while they're open. The others ask for their password.
+    final lockLabel = switch (unlocked) {
+      [] => 'Everything is locked',
+      [final item] => 'Lock “${item.name}”',
+      _ => 'Lock all ${unlocked.length} items',
+    };
+    final key = '$lockLabel/$appUnlocked';
     if (key == _shown) return;
     _shown = key;
     unawaited(
       _tray.show(
-        tooltip: unlocked == 0
+        tooltip: unlocked.isEmpty
             ? '${AppInfo.name} · everything is locked'
-            : '${AppInfo.name} · ${Format.count(unlocked, 'item')} unlocked',
-        attention: unlocked > 0,
+            : '${AppInfo.name} · '
+                  '${Format.count(unlocked.length, 'item')} unlocked',
+        attention: unlocked.isNotEmpty,
         menu: [
           const TrayMenuItem('open', 'Open ${AppInfo.name}'),
           const TrayMenuItem.separator(),
+          TrayMenuItem('lockAll', lockLabel, enabled: unlocked.isNotEmpty),
           TrayMenuItem(
-            'lockAll',
-            unlocked == 0 ? 'Everything is locked' : 'Lock all items',
-            enabled: unlocked > 0 && appUnlocked,
+            'lockApp',
+            appUnlocked ? 'Lock ${AppInfo.name}' : '${AppInfo.name} is locked',
+            enabled: appUnlocked,
           ),
-          TrayMenuItem('lockApp', 'Lock ${AppInfo.name}', enabled: appUnlocked),
           const TrayMenuItem.separator(),
           const TrayMenuItem('quit', 'Quit'),
         ],
@@ -130,18 +140,30 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
   Future<void> _showWindow() =>
       ref.read(windowStateProvider.notifier).showMain();
 
+  /// Locks what it can right away; items that need a password ask for it,
+  /// one after the other.
   Future<void> _lockAll() async {
-    final left = await ref
-        .read(protectionControllerProvider.notifier)
-        .lockAllUnlocked();
-    if (left.isEmpty) {
-      showToast('Every item is locked.', tone: Tone.success);
+    final protection = ref.read(protectionControllerProvider.notifier);
+    final left = await protection.lockAllUnlocked();
+    final needPassword = [
+      for (final item in left)
+        if (protection.lockRequirement(item) != LockRequirement.none) item,
+    ];
+    final intents = ref.read(launchIntentsProvider.notifier);
+    for (final item in needPassword) {
+      intents.add(
+        LockAgainIntent(item.itemPath, itemId: item.id, closed: false),
+      );
+    }
+    final failed = left.length - needPassword.length;
+    if (failed == 0) {
+      if (left.isEmpty) showToast('Every item is locked.', tone: Tone.success);
       return;
     }
     await _showWindow();
     showToast(
-      '${Format.count(left.length, 'item')} could not be locked here (they '
-      'need their own password, or a file is in use).',
+      '${Format.count(failed, 'item')} could not be locked. A file in it '
+      'may still be open: close it and try again.',
       tone: Tone.warning,
     );
   }

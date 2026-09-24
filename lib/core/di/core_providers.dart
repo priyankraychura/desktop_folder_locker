@@ -10,6 +10,7 @@ import '../../engine/drive/drive_service.dart';
 import '../../engine/engine_runner.dart';
 import '../../platform/access_control.dart';
 import '../../platform/dokany_setup.dart';
+import '../../platform/explorer_folders.dart';
 import '../../platform/system_tray.dart';
 import '../storage/app_paths.dart';
 
@@ -56,6 +57,12 @@ final accessRulesProvider = Provider<AccessRules>(
 /// The notification-area icon. Overridden with the native one on Windows
 /// in `bootstrap()`.
 final systemTrayProvider = Provider<SystemTray>((ref) => const NoSystemTray());
+
+/// The folders that Explorer shows. Overridden with the Explorer plug-in
+/// on Windows in `bootstrap()`; tests use a fake.
+final explorerFoldersProvider = Provider<ExplorerFolders>(
+  (ref) => const NoExplorerFolders(),
+);
 
 /// The drive helper, which encrypts folders into drive vaults and opens
 /// them as drives. It starts on first use and stops with the app (which

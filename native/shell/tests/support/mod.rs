@@ -71,7 +71,7 @@ impl Place {
 
 /// [path] with long names, as the shell reports it: %TEMP% can be
 /// `C:\Users\RUNNER~1\…`.
-fn long_path(path: &Path) -> PathBuf {
+pub fn long_path(path: &Path) -> PathBuf {
     let full = fs::canonicalize(path).unwrap();
     let text = full.to_str().unwrap();
     PathBuf::from(text.strip_prefix(r"\\?\").unwrap_or(text))

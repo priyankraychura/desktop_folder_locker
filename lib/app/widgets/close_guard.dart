@@ -17,9 +17,10 @@ import '../../features/shell/presentation/exit_dialog.dart';
 import '../app_window.dart';
 
 /// Intercepts the window's close button. With "Keep running in the
-/// notification area" on, the window only hides; otherwise the app exits
-/// through [exitApp]. In the small window of an Explorer request, it
-/// works like the dialog's Cancel.
+/// notification area" on, the window only hides while the app has
+/// something to look after (unlocked items, open drives); otherwise the
+/// app exits through [exitApp]. In the small window of a request, it works
+/// like the dialog's Cancel.
 class CloseGuard extends ConsumerStatefulWidget {
   const CloseGuard({required this.enabled, required this.child, super.key});
 
@@ -54,12 +55,11 @@ class _CloseGuardState extends ConsumerState<CloseGuard> with WindowListener {
     if (ref.read(windowStateProvider).mode == WindowMode.request) {
       return _closeRequest();
     }
+    final window = ref.read(windowStateProvider.notifier);
+    if (!window.canRunInBackground) return exitApp(ref);
+    await window.toBackground();
     final settings = ref.read(settingsControllerProvider);
     final tray = ref.read(systemTrayProvider);
-    if (!settings.keepRunningInTray || !tray.isAvailable) {
-      return exitApp(ref);
-    }
-    await windowManager.hide();
     if (!settings.trayHintShown) {
       await tray.notify(
         title: '${AppInfo.name} is still running',

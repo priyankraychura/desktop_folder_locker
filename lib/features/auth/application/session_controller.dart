@@ -113,11 +113,17 @@ class SessionController extends Notifier<SessionState> {
 
   /// Checks [password] without changing the session.
   Future<bool> verifyPassword(String password) async {
-    final keystore = state.keystore;
-    if (keystore == null) return false;
-    final key = await _auth.unlock(keystore, password);
+    final key = await masterKeyFor(password);
     key?.dispose();
     return key != null;
+  }
+
+  /// The master key for [password], without unlocking the app, or `null`
+  /// if the password is wrong. The caller owns the key.
+  Future<DerivedKey?> masterKeyFor(String password) async {
+    final keystore = state.keystore;
+    if (keystore == null) return null;
+    return _auth.unlock(keystore, password);
   }
 
   /// Replaces the stored keystore, for example after a new recovery key
