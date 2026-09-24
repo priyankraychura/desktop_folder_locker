@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icons/app_icon.png" width="96" alt="Folder Locker icon">
+  <img src="assets/icons/app_icon.png" width="96" alt="Cloak icon">
 </p>
 
-<h1 align="center">Folder Locker</h1>
+<h1 align="center">Cloak</h1>
 
 <p align="center">
   Lock, encrypt and hide folders on Windows. Free, private, and built with Flutter.
@@ -12,7 +12,7 @@
   <a href="https://github.com/priyankraychura/desktop_folder_locker/actions/workflows/ci.yml"><img src="https://github.com/priyankraychura/desktop_folder_locker/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
 </p>
 
-Folder Locker turns a folder or file into an **encrypted vault** (`Name.flk`)
+Cloak turns a folder or file into an **encrypted vault** (`Name.flk`)
 in the same place. The vault shows a lock icon in Explorer. Double-click it,
 type your password, and your folder comes back.
 
@@ -58,7 +58,7 @@ shown are temporary test folders.</sub>
 - **Explorer integration**:
   - vaults show a lock icon;
   - **double-click opens the password dialog**;
-  - the right-click menu knows each item: **Lock with Folder Locker** on
+  - the right-click menu knows each item: **Lock with Cloak** on
     folders and files, **Unlock…** on blocked ones, **Open…** on drive
     vaults, and the app does it right away;
   - drive vault folders look locked: the vault icon, and only `vault.flk`
@@ -88,7 +88,7 @@ shown are temporary test folders.</sub>
 
 1. On first start you create a master password and save your recovery key.
 2. Drag a folder into the app, or right-click it in Explorer and choose
-   **Lock with Folder Locker**. Then choose how to protect it:
+   **Lock with Cloak**. Then choose how to protect it:
    - **Encrypt** (recommended),
    - **Block access**,
    - **Read-only**, or
@@ -105,7 +105,7 @@ shown are temporary test folders.</sub>
    restored and opened. A drive vault opens as a drive (for example `V:`)
    instead: click **Open** in the app, or double-click `vault.flk` inside
    `Name.flkd`.
-5. Click **Lock** in the app, **Lock with Folder Locker** in Explorer, or
+5. Click **Lock** in the app, **Lock with Cloak** in Explorer, or
    **Lock all items** in the menu of its icon next to the clock, to lock it
    again. The app can remind you about
    unlocked items, lock them again by itself, and offer to lock them when
@@ -117,13 +117,18 @@ The app is not published yet. To try it:
 
 1. Open the latest successful
    [CI run](https://github.com/priyankraychura/desktop_folder_locker/actions/workflows/ci.yml).
-2. Download the **folder-locker-setup** artifact.
-3. Run `FolderLocker-Setup-<version>.exe`. It installs for all users, with
+2. Download the **cloak-setup** artifact.
+3. Run `Cloak-Setup-<version>.exe`. It installs for all users, with
    one administrator prompt at the start, or, if you choose **Install for me
    only**, for you without one.
 
 The installer is not code-signed yet (planned in Phase 4), so Windows
 SmartScreen warns about it. Click **More info → Run anyway**.
+
+Cloak was called Folder Locker before. Installing it over Folder Locker
+keeps your items, settings and vaults, and replaces the old app. (It stays
+in the old folder under Program Files; uninstall Folder Locker first for a
+fresh `Cloak` folder. Your items and vaults stay either way.)
 
 Opening encrypted folders as drives needs
 [Dokany](https://github.com/dokan-dev/dokany), a free driver. If it's
@@ -156,10 +161,10 @@ pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\doka
 ```
 
 `flutter build windows` copies the release helper and plug-in
-(`folder_locker_drive.exe` and `folder_locker_shell.dll` from
+(`cloak_drive.exe` and `cloak_shell.dll` from
 `native\target\release`) next to the app, if they have been built. The app
 registers the plug-in for Explorer when it starts. To try a debug build of
-the helper instead, set `FOLDER_LOCKER_DRIVE` to its path. `cargo test` in
+the helper instead, set `CLOAK_DRIVE` to its path. `cargo test` in
 `native/` runs their tests; the drive test needs Dokany (see
 [docs/DRIVE_VAULT.md](docs/DRIVE_VAULT.md)), and the Explorer test, which
 rewrites your Explorer entries, runs only with `FLK_SHELL_E2E=1`.
@@ -172,7 +177,7 @@ then:
 copy C:\Windows\System32\msvcp140.dll     build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140.dll   build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140_1.dll build\windows\x64\runner\Release
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\folder_locker.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\cloak.iss
 ```
 
 The installer is written to `build\installer`. CI runs all these steps on
@@ -260,8 +265,8 @@ lib/
 test/                    engine, feature, widget and screenshot tests
 native/                  the native parts, in Rust (Cargo workspace)
   vault2/                drive vault format: keys, names, contents, tree
-  drive/                 folder_locker_drive.exe: protocol, Dokany drive
-  shell/                 folder_locker_shell.dll: the Explorer plug-in
+  drive/                 cloak_drive.exe: protocol, Dokany drive
+  shell/                 cloak_shell.dll: the Explorer plug-in
   vendor/dokan/          Dokany bindings for Rust, with a fix
 installer/               Inno Setup script, Dokany download, Windows 11
                          menu package (sparse/)
@@ -289,7 +294,7 @@ Details are in [docs/PLAN.md](docs/PLAN.md).
 
 Copyright (C) 2026 Priyank Raychura
 
-Folder Locker is free software under the
+Cloak is free software under the
 [GNU General Public License, version 3](LICENSE) or (at your option) any
 later version. You may use, share and change it, but copies and changed
 versions must stay under the same license, credit the original, and come

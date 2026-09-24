@@ -1,6 +1,6 @@
 # Architecture
 
-This document explains how Folder Locker is built. It covers:
+This document explains how Cloak is built. It covers:
 
 - the code layers and folder structure;
 - the `.flk` vault format and the key hierarchy;
@@ -356,7 +356,7 @@ Items with `ProtectionMethod.drive` are folders that become `Name.flkd`,
 opened as a drive through Dokany. The format, the helper's protocol and
 the security notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 
-- **The helper.** `HelperDriveService` starts `folder_locker_drive.exe`
+- **The helper.** `HelperDriveService` starts `cloak_drive.exe`
   (next to the app) on first use, and talks to it over its standard input
   and output. The data key goes into the pipe from protected memory, and
   the buffer is wiped. When the app exits, even by a crash, the pipe
@@ -393,7 +393,12 @@ the security notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 
 ## 6. App data
 
-Everything lives in `%APPDATA%\FolderLocker`:
+Everything lives in `%APPDATA%\FolderLocker`. The app was called Folder
+Locker before, and what existing installs and vaults rely on keeps that
+name: this folder, the registry ids (`FolderLocker.Vault`,
+`FolderLocker.Lock`, the badge's ` FolderLocker`), the `.flk` extension and
+the vault format's labels (`folder-locker/...`, section 4). The installer
+removes the old app's files and shortcuts when it updates it.
 
 | File | Content |
 |---|---|
@@ -427,7 +432,7 @@ recovery key.
   | `.flk` | `FolderLocker.Vault` |
   | `FolderLocker.Vault\DefaultIcon` | `"<exe>",-102` (vault icon resource) |
   | `FolderLocker.Vault\shell\open\command` | `"<exe>" --open "%1"` |
-  | `CLSID\{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}\InprocServer32` | `<app folder>\folder_locker_shell.dll`, `ThreadingModel` = `Apartment` |
+  | `CLSID\{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}\InprocServer32` | `<app folder>\cloak_shell.dll`, `ThreadingModel` = `Apartment` |
   | `Directory`, `*` and `Drive` `\shell\FolderLocker.Lock` | `ExplorerCommandHandler` = the class id above |
 
   Installed for all users, the installer also registers the lock badge for
@@ -435,27 +440,27 @@ recovery key.
 
   | Key (under `HKLM\Software`) | Value |
   |---|---|
-  | `Classes\CLSID\{38F771FD-E77E-4105-A560-9E02A7B507D5}\InprocServer32` | `<app folder>\folder_locker_shell.dll`, `ThreadingModel` = `Apartment` |
+  | `Classes\CLSID\{38F771FD-E77E-4105-A560-9E02A7B507D5}\InprocServer32` | `<app folder>\cloak_shell.dll`, `ThreadingModel` = `Apartment` |
   | `Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\ FolderLocker` | the class id above |
 
-  Without `folder_locker_shell.dll` next to the app (a development build
+  Without `cloak_shell.dll` next to the app (a development build
   without it), folders and files get the plain `FolderLocker.Lock` entry
-  instead: "Lock with Folder Locker", `"<exe>" --lock "%1"`.
+  instead: "Lock with Cloak", `"<exe>" --lock "%1"`.
 
   On Windows 11 the entry appears under **Show more options**; the first
   menu level needs a signed package (Phase 3e).
-- **Explorer plug-in** (`native/shell`, `folder_locker_shell.dll`). A
+- **Explorer plug-in** (`native/shell`, `cloak_shell.dll`). A
   small in-process COM server in Rust with two classes. The right-click
   entry implements `IExplorerCommand`, so Explorer asks it for the entry's
   title and state, and runs it:
 
   | The item | The entry | The app gets |
   |---|---|---|
-  | A new folder or file | Lock with Folder Locker | `--lock <path>` |
-  | A listed item that is unlocked | Lock with Folder Locker | `--lock <item>` |
-  | A blocked, read-only or hidden item | Unlock with Folder Locker | `--unlock <item>` |
-  | A drive vault (`.flkd`) that is locked, or not in the list | Open with Folder Locker | `--open <vault>` |
-  | An open drive (`V:`) or its vault folder | Lock with Folder Locker | `--lock <item>` |
+  | A new folder or file | Lock with Cloak | `--lock <path>` |
+  | A listed item that is unlocked | Lock with Cloak | `--lock <item>` |
+  | A blocked, read-only or hidden item | Unlock with Cloak | `--unlock <item>` |
+  | A drive vault (`.flkd`) that is locked, or not in the list | Open with Cloak | `--open <vault>` |
+  | An open drive (`V:`) or its vault folder | Lock with Cloak | `--lock <item>` |
   | A `.flk` file, a whole drive, anything inside a `.flkd` folder or the Recycle Bin, several items | none (`.flk` files have the file type's own "Unlock with…") | |
 
   The lock badge implements `IShellIconOverlayIdentifier`: a padlock
@@ -470,14 +475,14 @@ recovery key.
   change notification on that folder says when, so a badge changes as
   soon as the app tells Explorer an item changed. Everything else is the
   app's job: the plug-in only starts
-  `folder_locker.exe` from its own folder, passing none of Explorer's
+  `cloak.exe` from its own folder, passing none of Explorer's
   handles. Every entry point catches errors and panics and returns an
   error code, so a problem in it can't take Explorer down. The release
   build carries the Visual C++ runtime inside (`static_vcruntime`), so it
   doesn't depend on whichever `vcruntime140.dll` Explorer has loaded.
 
   The app loads the DLL too, for one more export:
-  `FolderLockerShownFolders` lists the folders that Explorer windows and
+  `CloakShownFolders` lists the folders that Explorer windows and
   tabs show (`IShellWindows`, and each window's current folder as a file
   system path). Each call asks Explorer's process, so the app makes it in
   another isolate, one at a time (`NativeExplorerFolders`).
@@ -508,7 +513,7 @@ recovery key.
 - **Block access / Read-only** use `GetNamedSecurityInfoW` and
   `SetNamedSecurityInfoW` (section 5.1).
 - **Notification-area icon** (`windows/runner/tray_icon.cpp`). Dart drives
-  it over the `folder_locker/tray` method channel:
+  it over the `cloak/tray` method channel:
   - `show` sets the tooltip, the "items unlocked" icon and the menu;
   - `hide` removes the icon;
   - `notify` shows a balloon, which Windows 10 and 11 turn into a normal

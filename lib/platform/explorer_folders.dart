@@ -20,7 +20,7 @@ class NoExplorerFolders implements ExplorerFolders {
 }
 
 /// Asks Explorer through the Explorer plug-in next to the app
-/// (`FolderLockerShownFolders` in `folder_locker_shell.dll`), in another
+/// (`CloakShownFolders` in `cloak_shell.dll`), in another
 /// isolate: each question goes to Explorer's process, which can be slow
 /// to answer.
 class NativeExplorerFolders implements ExplorerFolders {
@@ -52,7 +52,7 @@ class NativeExplorerFolders implements ExplorerFolders {
         .lookupFunction<
           Int32 Function(Pointer<Uint16>, Uint32),
           int Function(Pointer<Uint16>, int)
-        >('FolderLockerShownFolders');
+        >('CloakShownFolders');
     var capacity = 4096;
     while (true) {
       final buffer = calloc<Uint16>(capacity);

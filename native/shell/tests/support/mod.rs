@@ -99,7 +99,7 @@ pub fn take_string(value: PWSTR) -> String {
     text
 }
 
-/// `folder_locker_shell.dll`, built along with the tests.
+/// `cloak_shell.dll`, built along with the tests.
 pub fn built_dll() -> PathBuf {
     let deps = std::env::current_exe()
         .unwrap()
@@ -108,9 +108,9 @@ pub fn built_dll() -> PathBuf {
         .to_owned();
     [deps.parent().unwrap(), deps.as_path()]
         .iter()
-        .map(|dir| dir.join("folder_locker_shell.dll"))
+        .map(|dir| dir.join("cloak_shell.dll"))
         .find(|dll| dll.exists())
-        .expect("folder_locker_shell.dll is built")
+        .expect("cloak_shell.dll is built")
 }
 
 /// Writes a string value in the registry, creating the key.

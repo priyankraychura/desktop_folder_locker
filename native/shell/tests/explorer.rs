@@ -2,7 +2,7 @@
 //! registers it, and Windows' own right-click menu code (shell32) finds
 //! it, loads it, shows its entry and runs it.
 //!
-//! It rewrites the current user's Folder Locker entries in the registry,
+//! It rewrites the current user's Cloak entries in the registry,
 //! so it runs only when `FLK_SHELL_E2E` is set (CI does). Starting the app
 //! writes them again.
 
@@ -14,7 +14,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use folder_locker_shell::CLSID_MENU;
+use cloak_shell::CLSID_MENU;
 use support::{built_dll, remove_key, set, Place};
 use windows::core::{HSTRING, PCSTR};
 use windows::Win32::System::Com::{CoInitializeEx, IBindCtx, COINIT_APARTMENTTHREADED};
@@ -46,13 +46,9 @@ fn explorer_shows_and_runs_the_entry() {
     // writes down how it was started.
     let app = place.root.join("App");
     fs::create_dir(&app).unwrap();
-    let dll = app.join("folder_locker_shell.dll");
+    let dll = app.join("cloak_shell.dll");
     fs::copy(built_dll(), &dll).unwrap();
-    fs::copy(
-        env!("CARGO_BIN_EXE_flk-record-args"),
-        app.join("folder_locker.exe"),
-    )
-    .unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_flk-record-args"), app.join("cloak.exe")).unwrap();
     let record = place.root.join("started.txt");
     std::env::set_var("FLK_RECORD_ARGS", &record);
 
@@ -63,7 +59,7 @@ fn explorer_shows_and_runs_the_entry() {
 
     // A folder that isn't locked: lock it.
     let menu = Menu::of(&place.folder);
-    let id = menu.entry("Lock with Folder Locker");
+    let id = menu.entry("Lock with Cloak");
     menu.run(id);
     let expected = format!("--lock\t{}", place.folder.display());
     assert_eq!(
@@ -73,7 +69,7 @@ fn explorer_shows_and_runs_the_entry() {
 
     // A blocked folder: unlock it.
     let menu = Menu::of(&place.blocked);
-    let id = menu.entry("Unlock with Folder Locker");
+    let id = menu.entry("Unlock with Cloak");
     menu.run(id);
     let expected = format!("--unlock\t{}", place.blocked.display());
     assert_eq!(
@@ -83,8 +79,8 @@ fn explorer_shows_and_runs_the_entry() {
 
     // Files too; not vault files, which have their own entry; not drives
     // that aren't vaults.
-    Menu::of(&place.file).entry("Lock with Folder Locker");
-    Menu::of(&place.drive_vault).entry("Open with Folder Locker");
+    Menu::of(&place.file).entry("Lock with Cloak");
+    Menu::of(&place.drive_vault).entry("Open with Cloak");
     Menu::of(&place.vault).no_entry();
     let system = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into());
     Menu::of(Path::new(&format!("{system}\\"))).no_entry();
@@ -194,7 +190,7 @@ impl Menu {
         let ours: Vec<_> = self
             .entries
             .iter()
-            .filter(|(text, _)| text.contains("Folder Locker"))
+            .filter(|(text, _)| text.contains("Cloak"))
             .collect();
         assert_eq!(ours.len(), 1, "one entry of ours in {:?}", self.titles());
         assert_eq!(ours[0].0, title);
@@ -203,10 +199,7 @@ impl Menu {
 
     fn no_entry(&self) {
         assert!(
-            !self
-                .titles()
-                .iter()
-                .any(|text| text.contains("Folder Locker")),
+            !self.titles().iter().any(|text| text.contains("Cloak")),
             "no entry of ours in {:?}",
             self.titles()
         );

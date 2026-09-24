@@ -90,7 +90,7 @@ class AppHarness {
         cryptoProvider.overrideWithValue(crypto),
         kdfPolicyProvider.overrideWithValue(KdfPolicy.fast),
         executablePathProvider.overrideWithValue(
-          p.join(root.path, 'app', 'folder_locker.exe'),
+          p.join(root.path, 'app', 'cloak.exe'),
         ),
         initialSettingsProvider.overrideWithValue(settings),
         // Temporary folders live under %LOCALAPPDATA% on Windows, which the
@@ -122,10 +122,8 @@ class AppHarness {
   /// A folder for user files (outside the app data folder).
   String userPath(String name) => p.join(root.path, 'user', name);
 
-  Widget get app => UncontrolledProviderScope(
-    container: container,
-    child: const FolderLockerApp(),
-  );
+  Widget get app =>
+      UncontrolledProviderScope(container: container, child: const CloakApp());
 
   /// Removes the app from the tree and disposes providers (stops timers
   /// such as auto-lock). Call at the end of a widget test.

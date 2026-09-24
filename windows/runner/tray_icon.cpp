@@ -12,8 +12,8 @@ namespace {
 
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kTrayIconId = 1;
-constexpr char kChannelName[] = "folder_locker/tray";
-constexpr wchar_t kWindowClass[] = L"FolderLockerTrayWindow";
+constexpr char kChannelName[] = "cloak/tray";
+constexpr wchar_t kWindowClass[] = L"CloakTrayWindow";
 
 std::wstring Utf16FromUtf8(const std::string& text) {
   if (text.empty()) {

@@ -98,7 +98,7 @@ void main() {
     expect(lock.label, 'Lock “Taxes”');
     expect(lock.enabled, isTrue, reason: 'its key is kept while it is open');
     final lockApp = trayEntry(app, 'lockApp');
-    expect(lockApp.label, 'Folder Locker is locked');
+    expect(lockApp.label, 'Cloak is locked');
     expect(lockApp.enabled, isFalse);
 
     app.tray.select('lockAll');

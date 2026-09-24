@@ -10,7 +10,7 @@ import '../engine_exception.dart';
 import '../operations/operation_progress.dart';
 import 'drive_service.dart';
 
-/// Talks to the drive helper (`folder_locker_drive.exe`), one JSON object
+/// Talks to the drive helper (`cloak_drive.exe`), one JSON object
 /// per line on its stdin and stdout (see `native/drive/src/protocol.rs`).
 ///
 /// The helper starts on first use. When its stdin closes (the app quits or
@@ -20,13 +20,13 @@ class HelperDriveService implements DriveService {
   HelperDriveService(this.executable);
 
   /// The helper next to the app's executable, or the one named by the
-  /// `FOLDER_LOCKER_DRIVE` environment variable (for development).
+  /// `CLOAK_DRIVE` environment variable (for development).
   static String defaultExecutable() {
-    final override = Platform.environment['FOLDER_LOCKER_DRIVE'];
+    final override = Platform.environment['CLOAK_DRIVE'];
     if (override != null && override.isNotEmpty) return override;
     return p.join(
       p.dirname(Platform.resolvedExecutable),
-      Platform.isWindows ? 'folder_locker_drive.exe' : 'folder_locker_drive',
+      Platform.isWindows ? 'cloak_drive.exe' : 'cloak_drive',
     );
   }
 

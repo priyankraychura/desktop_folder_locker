@@ -228,7 +228,7 @@ impl ContentFile {
             }
             if header[4] != VERSION {
                 return Err(Error::corrupt(
-                    "a file was written by a newer version of Folder Locker",
+                    "a file was written by a newer version of Cloak",
                 ));
             }
             Some(header[8..].try_into().expect("24 bytes"))

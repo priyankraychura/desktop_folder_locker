@@ -20,7 +20,7 @@ const ICON: &[u8] = include_bytes!("../../../windows/runner/resources/vault_icon
 
 const DESKTOP_INI_TEXT: &str = "[.ShellClassInfo]\r\n\
      IconResource=folder.ico,0\r\n\
-     InfoTip=Encrypted by Folder Locker. Open vault.flk to unlock it.\r\n";
+     InfoTip=Encrypted by Cloak. Open vault.flk to unlock it.\r\n";
 
 /// Gives the vault folder its look. Doing it again changes nothing.
 pub fn decorate(vault: &Path) -> io::Result<()> {

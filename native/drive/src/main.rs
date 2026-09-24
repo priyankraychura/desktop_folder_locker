@@ -1,5 +1,5 @@
-//! `folder_locker_drive`: the helper that opens drive vaults for the
-//! Folder Locker app.
+//! `cloak_drive`: the helper that opens drive vaults for the
+//! Cloak app.
 //!
 //! The app starts it and talks to it over stdin and stdout (see
 //! [`protocol`]). When stdin closes (the app quit or crashed), every drive

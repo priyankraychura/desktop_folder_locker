@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,8 +12,8 @@ import '../features/shell/presentation/home_shell.dart';
 import 'app_window.dart';
 
 /// Shows onboarding, the lock screen or the main window depending on the
-/// session, with a soft cross-fade between them. In the small window that
-/// Explorer requests get, only their dialog shows.
+/// session, with a soft cross-fade between them. In the compact window of
+/// a request, only its dialog shows.
 class AppGate extends ConsumerWidget {
   const AppGate({super.key});
 
@@ -33,7 +35,7 @@ class AppGate extends ConsumerWidget {
       SessionStatus.loading => const _Splash(),
       SessionStatus.needsSetup || SessionStatus.onboarding => const SetupPage(),
       SessionStatus.locked => const LockScreen(),
-      SessionStatus.unlocked => const HomeShell(),
+      SessionStatus.unlocked => const _AtLeastAppSize(child: HomeShell()),
     };
     return AnimatedSwitcher(
       duration: AppMotion.slow,
@@ -51,6 +53,34 @@ class AppGate extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Lays the app out at least at its smallest window size, cut to the space
+/// there is: for a moment, the window is compact around it (while it fades
+/// out as the app locks, or before the window grows back).
+class _AtLeastAppSize extends StatelessWidget {
+  const _AtLeastAppSize({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      const smallest = NativeAppWindow.appMinimumSize;
+      final width = math.max(smallest.width, constraints.maxWidth);
+      final height = math.max(smallest.height, constraints.maxHeight);
+      return ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: width,
+          maxWidth: width,
+          minHeight: height,
+          maxHeight: height,
+          child: child,
+        ),
+      );
+    },
+  );
 }
 
 class _Splash extends StatelessWidget {

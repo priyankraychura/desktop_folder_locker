@@ -13,9 +13,7 @@ import '../support/test_env.dart';
 
 /// The drive helper built by `cargo build` in `native/`, if any.
 String? _builtHelper() {
-  final name = Platform.isWindows
-      ? 'folder_locker_drive.exe'
-      : 'folder_locker_drive';
+  final name = Platform.isWindows ? 'cloak_drive.exe' : 'cloak_drive';
   for (final profile in ['debug', 'release']) {
     final path = p.join('native', 'target', profile, name);
     if (File(path).existsSync()) return p.absolute(path);

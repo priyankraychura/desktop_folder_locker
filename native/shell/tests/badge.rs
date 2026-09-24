@@ -13,7 +13,7 @@ mod support;
 use std::fs;
 use std::path::Path;
 
-use folder_locker_shell::{BADGE_ICON, CLSID_BADGE};
+use cloak_shell::{BADGE_ICON, CLSID_BADGE};
 use support::{built_dll, remove_key, set, Place};
 use windows::core::{Interface, HSTRING};
 use windows::Win32::Foundation::S_OK;
@@ -48,7 +48,7 @@ fn explorer_shows_the_badge_on_protected_items() {
 
     let app = place.root.join("App");
     fs::create_dir(&app).unwrap();
-    let dll = app.join("folder_locker_shell.dll");
+    let dll = app.join("cloak_shell.dll");
     fs::copy(built_dll(), &dll).unwrap();
     let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../windows/runner/resources");
     fs::copy(resources.join(BADGE_ICON), app.join(BADGE_ICON)).unwrap();

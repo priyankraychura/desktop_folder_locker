@@ -8,7 +8,7 @@ import 'package:win32_registry/win32_registry.dart';
 // The entries go under a test key in HKEY_CURRENT_USER instead of
 // Software\Classes, so Explorer never sees them. Windows only (in CI).
 void main() {
-  const testKey = 'FolderLockerTests';
+  const testKey = 'CloakTests';
   const classes = 'Software\\$testKey\\Classes';
   const classId = ExplorerIntegration.pluginClassId;
   late Directory app;
@@ -41,7 +41,7 @@ void main() {
 
   setUp(() {
     app = Directory.systemTemp.createTempSync('flk_explorer_');
-    exe = p.join(app.path, 'folder_locker.exe');
+    exe = p.join(app.path, 'cloak.exe');
     integration = ExplorerIntegration(exe, classesPath: classes);
   });
 
@@ -74,7 +74,7 @@ void main() {
       '"$exe" --open "%1"',
     );
     for (final target in ['Directory', '*']) {
-      expect(read(verb(target)), 'Lock with Folder Locker');
+      expect(read(verb(target)), 'Lock with Cloak');
       expect(read('${verb(target)}\\command'), '"$exe" --lock "%1"');
     }
     expect(exists(verb('Drive')), isFalse);
@@ -89,7 +89,7 @@ void main() {
   test('with the plug-in, its entry replaces "Lock with"', () {
     // Registered before the plug-in shipped.
     integration.register();
-    final dll = File(p.join(app.path, 'folder_locker_shell.dll'))
+    final dll = File(p.join(app.path, 'cloak_shell.dll'))
       ..writeAsBytesSync(const []);
     expect(integration.hasPlugin, isTrue);
     expect(integration.isRegistered, isFalse);

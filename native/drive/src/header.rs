@@ -41,10 +41,7 @@ impl VaultHeader {
 
     pub fn parse(prefix: &[u8; 64]) -> Result<Self, Failure> {
         if &prefix[..8] != MAGIC {
-            return Err(Failure::new(
-                "notAVault",
-                "This is not a Folder Locker vault",
-            ));
+            return Err(Failure::new("notAVault", "This is not a Cloak vault"));
         }
         let version = u16::from_le_bytes([prefix[8], prefix[9]]);
         let flags = u16::from_le_bytes([prefix[10], prefix[11]]);
@@ -52,7 +49,7 @@ impl VaultHeader {
         if version != FORMAT_VERSION || flags & FLAG_DRIVE == 0 || header_size != HEADER_SIZE {
             return Err(Failure::new(
                 "unsupportedVersion",
-                "This is not a drive vault, or a newer version of Folder Locker made it",
+                "This is not a drive vault, or a newer version of Cloak made it",
             ));
         }
         let block_size = u32::from_le_bytes(prefix[32..36].try_into().expect("4 bytes"));

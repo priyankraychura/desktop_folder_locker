@@ -2,7 +2,7 @@
 //!
 //! One entry at most, whose title follows the item: lock what isn't
 //! protected (or is unlocked), unlock what's locked, open drive vaults,
-//! lock open drives. The app then does it (`folder_locker.exe --lock
+//! lock open drives. The app then does it (`cloak.exe --lock
 //! "<path>"`, `--unlock`, `--open`), with its usual dialogs and checks.
 
 use crate::state::{normalize, Item, Items, Method, Role};
@@ -29,9 +29,9 @@ impl Verb {
 
     pub fn title(self) -> &'static str {
         match self {
-            Self::Lock => "Lock with Folder Locker",
-            Self::Unlock => "Unlock with Folder Locker",
-            Self::Open => "Open with Folder Locker",
+            Self::Lock => "Lock with Cloak",
+            Self::Unlock => "Unlock with Cloak",
+            Self::Open => "Open with Cloak",
         }
     }
 }
@@ -77,7 +77,7 @@ pub fn command_for(path: &str, is_dir: bool, items: &Items) -> Option<Command> {
         return listed(item, role, path);
     }
     let name = normalize(path);
-    // `.flk` files have "Unlock with Folder Locker" of their own.
+    // `.flk` files have "Unlock with Cloak" of their own.
     if name.ends_with(".flk") {
         return None;
     }
@@ -217,8 +217,8 @@ mod tests {
             target: r"C:\My Docs\New folder".into(),
         };
         assert_eq!(
-            command.command_line(r"C:\Program Files\Folder Locker\folder_locker.exe"),
-            r#""C:\Program Files\Folder Locker\folder_locker.exe" --lock "C:\My Docs\New folder""#
+            command.command_line(r"C:\Program Files\Cloak\cloak.exe"),
+            r#""C:\Program Files\Cloak\cloak.exe" --lock "C:\My Docs\New folder""#
         );
         let root = Command {
             verb: Verb::Unlock,
@@ -229,8 +229,8 @@ mod tests {
 
     #[test]
     fn titles_say_what_happens() {
-        assert_eq!(Verb::Lock.title(), "Lock with Folder Locker");
-        assert_eq!(Verb::Unlock.title(), "Unlock with Folder Locker");
-        assert_eq!(Verb::Open.title(), "Open with Folder Locker");
+        assert_eq!(Verb::Lock.title(), "Lock with Cloak");
+        assert_eq!(Verb::Unlock.title(), "Unlock with Cloak");
+        assert_eq!(Verb::Open.title(), "Open with Cloak");
     }
 }

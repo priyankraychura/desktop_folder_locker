@@ -49,13 +49,13 @@ final class OpenVaultIntent extends LaunchIntent {
   bool get dialogOnly => true;
 }
 
-/// "Lock with Folder Locker" was chosen in Explorer: protect a new item,
+/// "Lock with Cloak" was chosen in Explorer: protect a new item,
 /// or lock a listed one again.
 final class LockPathIntent extends LaunchIntent {
   const LockPathIntent(super.path);
 }
 
-/// "Unlock with Folder Locker" was chosen in Explorer (the plug-in offers
+/// "Unlock with Cloak" was chosen in Explorer (the plug-in offers
 /// it for blocked, read-only and hidden items).
 final class UnlockPathIntent extends LaunchIntent {
   const UnlockPathIntent(super.path);

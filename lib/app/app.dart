@@ -15,8 +15,8 @@ import 'widgets/launch_intent_handler.dart';
 import 'widgets/tray_handler.dart';
 
 /// The root widget.
-class FolderLockerApp extends ConsumerWidget {
-  const FolderLockerApp({super.key});
+class CloakApp extends ConsumerWidget {
+  const CloakApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

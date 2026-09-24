@@ -107,9 +107,6 @@ Future<void> bootstrap(List<String> args) async {
   await window?.start();
 
   runApp(
-    UncontrolledProviderScope(
-      container: container,
-      child: const FolderLockerApp(),
-    ),
+    UncontrolledProviderScope(container: container, child: const CloakApp()),
   );
 }

@@ -1,4 +1,4 @@
-//! Stands in for `folder_locker.exe` in the plug-in's tests: appends its
+//! Stands in for `cloak.exe` in the plug-in's tests: appends its
 //! arguments, one line per start, to the file in `FLK_RECORD_ARGS`.
 
 use std::io::Write;

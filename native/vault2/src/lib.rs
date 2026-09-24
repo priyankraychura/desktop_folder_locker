@@ -1,4 +1,4 @@
-//! Folder Locker drive vaults (format version 2).
+//! Cloak drive vaults (format version 2).
 //!
 //! A drive vault is a folder, `Name.flkd`, that holds `vault.flk` (the
 //! header with the key slots, read and written by the app) and a `data`

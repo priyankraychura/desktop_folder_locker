@@ -13,7 +13,7 @@ Install it for the current user next to the installed app with:
   Add-AppxPackage -Path <package> -ExternalLocation <app folder>
 
 .EXAMPLE
-pwsh installer\sparse\build-package.ps1 -Publisher 'CN=Folder Locker Test' -Version 1.2.0 -Destination build\sparse -Certificate test.pfx -Password test
+pwsh installer\sparse\build-package.ps1 -Publisher 'CN=Cloak Test' -Version 1.2.0 -Destination build\sparse -Certificate test.pfx -Password test
 #>
 param(
     [Parameter(Mandatory)] [string] $Publisher,
@@ -50,7 +50,7 @@ $manifest = $manifest.Replace('$VERSION$', "$Version.0")
 
 # The tools' messages go to the console; only the package's path is output.
 # /nv: the app it points to isn't in the package.
-$package = Join-Path $Destination 'FolderLocker-ExplorerMenu.msix'
+$package = Join-Path $Destination 'Cloak-ExplorerMenu.msix'
 & (Find-SdkTool 'makeappx.exe') pack /d $work /p $package /nv /o | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed ($LASTEXITCODE)" }
 

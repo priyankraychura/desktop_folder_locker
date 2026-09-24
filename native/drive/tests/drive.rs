@@ -34,7 +34,7 @@ struct Helper {
 
 impl Helper {
     fn start() -> Self {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_folder_locker_drive"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_cloak_drive"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()

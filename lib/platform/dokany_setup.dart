@@ -59,7 +59,7 @@ class BundledDokanyInstaller implements DokanyInstaller {
         code: _errorFileNotFound,
       );
     }
-    final log = p.join(Directory.systemTemp.path, 'FolderLocker-Dokany.log');
+    final log = p.join(Directory.systemTemp.path, 'Cloak-Dokany.log');
     final parameters = '/i "$_msi" /passive /norestart /l*v "$log"';
     // The administrator prompt belongs to the app's window.
     final owner = _getForegroundWindow().address;

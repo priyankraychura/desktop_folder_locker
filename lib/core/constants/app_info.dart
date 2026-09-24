@@ -1,6 +1,10 @@
 /// App-wide names and identifiers. Change the product name here only.
+///
+/// The app was called Folder Locker before. The identifiers that existing
+/// installs and vaults rely on keep that name: the data folder, the
+/// registry ids, the `.flk` extension and the vault format's labels.
 abstract final class AppInfo {
-  static const String name = 'Folder Locker';
+  static const String name = 'Cloak';
   static const String version = '1.2.0';
   static const String tagline = 'Encrypt and hide your folders on Windows';
   static const String repositoryUrl =

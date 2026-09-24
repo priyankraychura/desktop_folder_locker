@@ -35,7 +35,7 @@ void main() {
     root = await Directory.systemTemp.createTemp('flk_guard_');
     guard = PathGuard(
       appDataDir: dir('AppData/Roaming/FolderLocker'),
-      executableDir: dir('Program Files/Folder Locker'),
+      executableDir: dir('Program Files/Cloak'),
       environment: {
         'ProgramFiles': p.join(root.path, 'Program Files'),
         'windir': dir('Windows'),

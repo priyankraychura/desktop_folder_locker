@@ -3,7 +3,7 @@
 //!
 //! Every Explorer window, and every tab of one, is a shell window, which
 //! shows a folder or a place that isn't on a disk (This PC, a search). The
-//! app calls [`FolderLockerShownFolders`] through FFI, away from its UI
+//! app calls [`CloakShownFolders`] through FFI, away from its UI
 //! thread: each question goes to Explorer's process.
 
 use std::ffi::c_void;
@@ -73,7 +73,7 @@ pub fn folder_of(window: &IDispatch) -> Option<PathBuf> {
 ///
 /// `buffer` must point to `capacity` writable units, or be null.
 #[no_mangle]
-pub unsafe extern "system" fn FolderLockerShownFolders(buffer: *mut u16, capacity: u32) -> i32 {
+pub unsafe extern "system" fn CloakShownFolders(buffer: *mut u16, capacity: u32) -> i32 {
     let text = match catch_unwind(shown_folders) {
         Ok(Ok(folders)) => encode(&folders),
         Ok(Err(error)) => return error.code().0,

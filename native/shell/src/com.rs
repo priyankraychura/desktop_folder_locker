@@ -336,9 +336,9 @@ fn start_app(command: &Command) -> Result<()> {
     Ok(())
 }
 
-/// `folder_locker.exe` next to this DLL.
+/// `cloak.exe` next to this DLL.
 fn app_path() -> Result<PathBuf> {
-    Ok(module_path()?.with_file_name("folder_locker.exe"))
+    Ok(module_path()?.with_file_name("cloak.exe"))
 }
 
 /// This DLL's own path.

@@ -1,4 +1,4 @@
-# Downloads the Dokany installer that Folder Locker ships and tests with,
+# Downloads the Dokany installer that Cloak ships and tests with,
 # and checks that it is exactly the expected file.
 #
 #   pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany

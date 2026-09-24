@@ -93,13 +93,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "Folder Locker" "\0"
-            VALUE "FileDescription", "Folder Locker" "\0"
+            VALUE "CompanyName", "Priyank Raychura" "\0"
+            VALUE "FileDescription", "Cloak" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "folder_locker" "\0"
+            VALUE "InternalName", "cloak" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 Priyank Raychura" "\0"
-            VALUE "OriginalFilename", "folder_locker.exe" "\0"
-            VALUE "ProductName", "Folder Locker" "\0"
+            VALUE "OriginalFilename", "cloak.exe" "\0"
+            VALUE "ProductName", "Cloak" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -1,4 +1,4 @@
-//! Folder Locker's Explorer plug-in (`folder_locker_shell.dll`): the
+//! Cloak's Explorer plug-in (`cloak_shell.dll`): the
 //! right-click entry that knows each item, and the lock badge. The app
 //! uses it too, to know which folders Explorer shows.
 //!

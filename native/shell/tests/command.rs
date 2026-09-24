@@ -9,7 +9,7 @@ mod support;
 
 use std::ffi::c_void;
 
-use folder_locker_shell::{
+use cloak_shell::{
     DllCanUnloadNow, DllGetClassObject, BADGE_ICON, CLSID_BADGE, CLSID_MENU, CLSID_MENU_PACKAGED,
 };
 use support::{selection, take_string, Place};
@@ -76,16 +76,16 @@ fn the_entry_follows_each_item(place: &Place) {
     drop(factory);
     assert_eq!(DllCanUnloadNow(), S_FALSE, "the command is alive");
 
-    let lock = Some("Lock with Folder Locker".to_owned());
+    let lock = Some("Lock with Cloak".to_owned());
     assert_eq!(entry(&command, &selection(&[&place.folder])), lock);
     assert_eq!(entry(&command, &selection(&[&place.file])), lock);
     assert_eq!(
         entry(&command, &selection(&[&place.blocked])),
-        Some("Unlock with Folder Locker".to_owned())
+        Some("Unlock with Cloak".to_owned())
     );
     assert_eq!(
         entry(&command, &selection(&[&place.drive_vault])),
-        Some("Open with Folder Locker".to_owned())
+        Some("Open with Cloak".to_owned())
     );
     // The file type has its own entry.
     assert_eq!(entry(&command, &selection(&[&place.vault])), None);
@@ -115,7 +115,7 @@ fn the_entry_follows_each_item(place: &Place) {
 
     let items = selection(&[&place.folder]);
     let icon = take_string(unsafe { command.GetIcon(&items) }.unwrap());
-    assert!(icon.ends_with(r"\folder_locker.exe,0"), "{icon}");
+    assert!(icon.ends_with(r"\cloak.exe,0"), "{icon}");
     assert_eq!(unsafe { command.GetCanonicalName() }.unwrap(), CLSID_MENU);
     assert_eq!(unsafe { command.GetFlags() }.unwrap(), ECF_DEFAULT.0 as u32);
     assert_eq!(
@@ -132,7 +132,7 @@ fn the_entry_follows_each_item(place: &Place) {
     .unwrap();
     assert_eq!(
         entry(&packaged, &selection(&[&place.blocked])),
-        Some("Unlock with Folder Locker".to_owned())
+        Some("Unlock with Cloak".to_owned())
     );
     drop(packaged);
 

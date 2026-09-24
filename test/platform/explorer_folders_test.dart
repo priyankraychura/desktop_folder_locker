@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 /// The Explorer plug-in built by `cargo build` in `native/`, if any.
 String? _builtPlugin() {
   for (final profile in ['release', 'debug']) {
-    final path = p.join('native', 'target', profile, 'folder_locker_shell.dll');
+    final path = p.join('native', 'target', profile, 'cloak_shell.dll');
     if (File(path).existsSync()) return p.absolute(path);
   }
   return null;

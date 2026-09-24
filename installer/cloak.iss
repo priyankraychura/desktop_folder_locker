@@ -1,17 +1,17 @@
-; Inno Setup script for Folder Locker (https://jrsoftware.org/isinfo.php).
+; Inno Setup script for Cloak (https://jrsoftware.org/isinfo.php).
 ;
 ; Build the drive helper, the Explorer plug-in and the app, and fetch
 ; Dokany, then compile this script:
 ;
-;   cargo build --release -p folder-locker-drive -p folder-locker-shell   (in native\)
+;   cargo build --release -p cloak-drive -p cloak-shell   (in native\)
 ;   flutter build windows --release                  (copies both next to the app)
 ;   pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
-;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\folder_locker.iss
+;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\cloak.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml). Without the Dokany step, the installer links to
 ; the Dokany download instead of installing it. Without the plug-in, the
-; right-click entry is the plain "Lock with Folder Locker".
+; right-click entry is the plain "Lock with Cloak".
 ;
 ; It installs for all users into Program Files (one administrator prompt),
 ; or, if the user chooses, for them only into %LOCALAPPDATA%\Programs
@@ -19,8 +19,8 @@
 ; lib/platform/explorer_integration.dart for the user installing it. Keep
 ; both in sync.
 
-#define AppName "Folder Locker"
-#define AppExeName "folder_locker.exe"
+#define AppName "Cloak"
+#define AppExeName "cloak.exe"
 #define AppPublisher "Priyank Raychura"
 #define AppUrl "https://github.com/priyankraychura/desktop_folder_locker"
 #define BuildDir "..\build\windows\x64\runner\Release"
@@ -32,12 +32,19 @@
 #define DokanyMsi "dokany\Dokan_x64.msi"
 ; The Explorer plug-in (native\shell) and its class id (CLSID_MENU in
 ; native\shell\src\com.rs). In sections, "{{" stands for "{".
-#define ShellDll "folder_locker_shell.dll"
+#define ShellDll "cloak_shell.dll"
 #define ShellClsid "{{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}"
 ; The plug-in's lock badge (CLSID_BADGE). Windows uses the first 15 icon
 ; overlays by name, so its name starts with a space.
 #define BadgeClsid "{{38F771FD-E77E-4105-A560-9E02A7B507D5}"
 #define BadgeName " FolderLocker"
+; The app was called Folder Locker before. An update removes the files and
+; shortcuts of that name (see [InstallDelete] and MovePluginAway). The
+; registry ids above and the data folder keep that name.
+#define OldAppName "Folder Locker"
+#define OldExeName "folder_locker.exe"
+#define OldHelperName "folder_locker_drive.exe"
+#define OldShellDll "folder_locker_shell.dll"
 
 #if FileExists(AddBackslash(SourcePath) + BuildDir + "\" + DokanyMsi)
   #define BundleDokany
@@ -75,7 +82,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir=..\build\installer
-OutputBaseFilename=FolderLocker-Setup-{#AppVersion}
+OutputBaseFilename=Cloak-Setup-{#AppVersion}
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
@@ -127,7 +134,7 @@ Root: HKCU; Subkey: "Software\Classes\{#VaultProgId}\shell\open\command"; ValueT
 ; The right-click entry (written anew: see RemoveExplorerEntry in [Code]).
 #ifdef ShellPlugin
 ; The Explorer plug-in's entry on folders, files and drives, which follows
-; each item: Lock, Unlock or Open with Folder Locker.
+; each item: Lock, Unlock or Open with Cloak.
 Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}"; ValueType: string; ValueName: ""; ValueData: "{#AppName} Explorer plug-in"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}\InprocServer32"; ValueType: string; ValueName: ""; ValueData: "{app}\{#ShellDll}"
 Root: HKCU; Subkey: "Software\Classes\CLSID\{#ShellClsid}\InprocServer32"; ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"
@@ -143,7 +150,7 @@ Root: HKLM; Subkey: "Software\Classes\CLSID\{#BadgeClsid}\InprocServer32"; Value
 Root: HKLM; Subkey: "Software\Classes\CLSID\{#BadgeClsid}\InprocServer32"; ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"; Check: IsAdminInstallMode
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Explorer\ShellIconOverlayIdentifiers\{#BadgeName}"; ValueType: string; ValueName: ""; ValueData: "{#BadgeClsid}"; Flags: uninsdeletekey; Check: IsAdminInstallMode
 #else
-; "Lock with Folder Locker" on folders and files.
+; "Lock with Cloak" on folders and files.
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: ""; ValueData: "Lock with {#AppName}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#AppExeName}"",0"
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\{#LockVerb}\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" --lock ""%1"""
@@ -155,9 +162,16 @@ Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}\command"; ValueType: s
 [InstallDelete]
 ; Copies of the plug-in that were in use last time (see MovePluginAway).
 Type: files; Name: "{app}\{#ShellDll}.*.old"
+Type: files; Name: "{app}\{#OldShellDll}.*.old"
+; The app under its old name.
+Type: files; Name: "{app}\{#OldExeName}"
+Type: files; Name: "{app}\{#OldHelperName}"
+Type: files; Name: "{autoprograms}\{#OldAppName}.lnk"
+Type: files; Name: "{autodesktop}\{#OldAppName}.lnk"
 
 [UninstallDelete]
 Type: files; Name: "{app}\{#ShellDll}.*.old"
+Type: files; Name: "{app}\{#OldShellDll}.*.old"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
@@ -189,7 +203,7 @@ var
   ResultCode: Integer;
 begin
   Msi := ExpandConstant('{app}\{#DokanyMsi}');
-  LogFile := ExpandConstant('{%TEMP}\FolderLocker-Dokany.log');
+  LogFile := ExpandConstant('{%TEMP}\Cloak-Dokany.log');
   WizardForm.StatusLabel.Caption := 'Installing Dokany...';
   WizardForm.ProgressGauge.Style := npbstMarquee;
   try
@@ -251,16 +265,15 @@ end;
   next update (see the InstallDelete section). Where Setup may, Windows
   deletes it when it restarts. So neither updating nor uninstalling needs a
   restart. }
-procedure MovePluginAway;
+procedure MoveAway(Dll: String);
 var
-  Dll, Stamp, Old: String;
+  Stamp, Old: String;
   Moved: Boolean;
 begin
-  Dll := ExpandConstant('{app}\{#ShellDll}');
   if not FileExists(Dll) or DeleteFile(Dll) then
     Exit;
   Stamp := GetDateTimeString('yyyymmddhhnnsszzz', #0, #0);
-  Old := ExpandConstant('{%TEMP}\FolderLocker-plugin-') + Stamp + '.dll.old';
+  Old := ExpandConstant('{%TEMP}\Cloak-plugin-') + Stamp + '.dll.old';
   Moved := RenameFile(Dll, Old);
   if not Moved then
   begin
@@ -275,6 +288,13 @@ begin
   end
   else
     Log('The Explorer plug-in is in use and could not be moved.');
+end;
+
+{ The plug-in, and its copy from when the app had its old name. }
+procedure MovePluginAway;
+begin
+  MoveAway(ExpandConstant('{app}\{#ShellDll}'));
+  MoveAway(ExpandConstant('{app}\{#OldShellDll}'));
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

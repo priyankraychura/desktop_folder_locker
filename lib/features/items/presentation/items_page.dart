@@ -339,32 +339,38 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The search field gives way when the window is narrow.
     return Row(
       children: [
-        SizedBox(
-          width: 320,
-          child: TextField(
-            controller: search,
-            focusNode: searchFocus,
-            onChanged: onSearch,
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: 'Search by name or location  (Ctrl+F)',
-              prefixIcon: const Icon(Icons.search_rounded, size: 20),
-              suffixIcon: search.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear',
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                      onPressed: () {
-                        search.clear();
-                        onSearch('');
-                      },
-                    ),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: TextField(
+                controller: search,
+                focusNode: searchFocus,
+                onChanged: onSearch,
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Search by name or location  (Ctrl+F)',
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  suffixIcon: search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear',
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                          onPressed: () {
+                            search.clear();
+                            onSearch('');
+                          },
+                        ),
+                ),
+              ),
             ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(width: AppSpacing.lg),
         SegmentedButton<ItemFilter>(
           showSelectedIcon: false,
           segments: const [
@@ -398,7 +404,7 @@ class _EmptyItems extends StatelessWidget {
           message:
               'Drag a folder or file here, or add one below. You can also '
               'right-click any folder in Explorer and choose “Lock with '
-              'Folder Locker”.',
+              'Cloak”.',
           actions: [
             FilledButton.icon(
               onPressed: onAddFolder,

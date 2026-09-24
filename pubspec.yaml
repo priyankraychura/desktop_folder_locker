@@ -2,9 +2,9 @@ name: desktop_folder_locker
 description: "Lock, encrypt and hide folders on Windows."
 publish_to: 'none'
 
-# Windows uses this as the product and file version of folder_locker.exe
+# Windows uses this as the product and file version of cloak.exe
 # (build-name = major.minor.patch, build-number = build suffix). Keep it in
-# sync with AppInfo.version and installer/folder_locker.iss.
+# sync with AppInfo.version and installer/cloak.iss.
 version: 1.2.0+3
 
 environment:

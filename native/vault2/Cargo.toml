@@ -1,6 +1,6 @@
 [package]
 name = "flk-vault2"
-description = "Folder Locker drive vaults: encrypted file names and contents (platform independent)."
+description = "Cloak drive vaults: encrypted file names and contents (platform independent)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

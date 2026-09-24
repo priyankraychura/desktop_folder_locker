@@ -19,7 +19,7 @@ key slots and the password handling.
 ## 1. Pieces
 
 ```text
-Flutter app ──JSON lines over a pipe──► folder_locker_drive.exe ──► Dokany ──► V:\
+Flutter app ──JSON lines over a pipe──► cloak_drive.exe ──► Dokany ──► V:\
   │                                         │
   │ passwords, key slots                    │ file names and contents
   ▼                                         ▼
@@ -211,9 +211,9 @@ can be locked again in any way.
 
 ## 4. The helper
 
-`folder_locker_drive.exe` lives next to `folder_locker.exe`. For
-development, the `FOLDER_LOCKER_DRIVE` environment variable can point to
-another build (`native\target\debug\folder_locker_drive.exe`).
+`cloak_drive.exe` lives next to `cloak.exe`. For
+development, the `CLOAK_DRIVE` environment variable can point to
+another build (`native\target\debug\cloak_drive.exe`).
 
 - **No window.** Release builds are Windows GUI programs that talk only
   through the pipes the app gives them.

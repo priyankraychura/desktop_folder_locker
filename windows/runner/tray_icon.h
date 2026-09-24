@@ -12,7 +12,7 @@
 
 // The app's icon in the Windows notification area ("system tray").
 //
-// Dart controls it through the "folder_locker/tray" method channel:
+// Dart controls it through the "cloak/tray" method channel:
 //   show   {tooltip, attention, menu: [{id, label, enabled} | {separator}]}
 //   hide
 //   notify {title, body}

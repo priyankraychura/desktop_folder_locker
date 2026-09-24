@@ -12,7 +12,7 @@ import 'vault_keys.dart';
 /// slots (`vault.flk`) and the encrypted files (`data`).
 ///
 /// This engine only writes and reads the header. The drive helper
-/// (`folder_locker_drive.exe`) imports, mounts and exports the files, with
+/// (`cloak_drive.exe`) imports, mounts and exports the files, with
 /// the data key the header protects. See `docs/DRIVE_VAULT.md`.
 abstract final class DriveVault {
   /// Extension of drive vault folders (with the dot).

@@ -12,14 +12,14 @@ import 'windows/win32_ffi.dart';
 /// * `.flk` vault files get the lock icon and open with the app, which
 ///   shows the password dialog (`app.exe --open "<vault>"`);
 /// * folders, files and open drives get one right-click entry. With the
-///   Explorer plug-in next to the app (`folder_locker_shell.dll`, see
+///   Explorer plug-in next to the app (`cloak_shell.dll`, see
 ///   `native/shell`), the entry follows each item: “Lock with…”, “Unlock
 ///   with…” or “Open with…”, which run `app.exe --lock`, `--unlock` or
 ///   `--open "<path>"`. Without it, folders and files get “Lock with Folder
 ///   Locker” (`app.exe --lock "<path>"`).
 ///
 /// On Windows 11 the entry is under “Show more options”. The installer
-/// writes the same entries (installer/folder_locker.iss): keep both in sync.
+/// writes the same entries (installer/cloak.iss): keep both in sync.
 class ExplorerIntegration {
   const ExplorerIntegration(
     this.executablePath, {
@@ -35,7 +35,7 @@ class ExplorerIntegration {
 
   /// The plug-in's class id (`CLSID_MENU` in native/shell/src/com.rs).
   static const String pluginClassId = '{3C1C048E-1C62-4B0B-87AC-55EDAD0E97BB}';
-  static const String pluginFileName = 'folder_locker_shell.dll';
+  static const String pluginFileName = 'cloak_shell.dll';
 
   static bool get isSupported => Platform.isWindows;
 

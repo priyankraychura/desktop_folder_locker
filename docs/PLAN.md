@@ -1,4 +1,4 @@
-# Folder Locker — Roadmap
+# Cloak — Roadmap
 
 A free Windows app, built with Flutter, that protects folders and files with
 real encryption. It works like Anvi Folder Locker, but it doesn't need a kernel
@@ -27,7 +27,7 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 | 1.2 | Security core | Master password (Argon2id), recovery key (X25519 sealed box), app lock screen, auto-lock, change password, reset with recovery key | ✅ |
 | 1.3 | Vault engine | `.flk` vault format (XChaCha20-Poly1305, 256 KiB chunks, key slots), lock/unlock for folders and files, verification before originals are deleted, crash-safe journal + recovery at startup, progress + cancel, background isolate | ✅ |
 | 1.4 | Protection methods | **Encrypt** (master password or a custom password per item) and **Hide** (Hidden + System attributes); both can be combined | ✅ encrypt · 🧪 hide |
-| 1.5 | Explorer basics | Vault files show a lock icon; **double-click opens the password dialog**; right-click "Lock with Folder Locker" on folders and files; single instance with argument forwarding | 🧪 |
+| 1.5 | Explorer basics | Vault files show a lock icon; **double-click opens the password dialog**; right-click "Lock with Cloak" on folders and files; single instance with argument forwarding | 🧪 |
 | 1.6 | Modern UI/UX | Custom title bar, sidebar navigation, drag & drop, search and filters, empty states, progress dialog, toasts, keyboard shortcuts, onboarding | ✅ |
 | 1.7 | Packaging | Inno Setup installer (per user, registers Explorer integration, removes it on uninstall), Visual C++ runtime bundled, README build guide | 🧪 |
 
@@ -53,7 +53,7 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 
 1. First launch: create a master password and save the recovery key.
 2. Drag a folder into the app (or right-click it in Explorer → *Lock with
-   Folder Locker*) and choose **Encrypt** and/or **Hide**.
+   Cloak*) and choose **Encrypt** and/or **Hide**.
 3. The folder turns into `Name.flk` with a lock icon, in the same place.
 4. Double-clicking `Name.flk` opens the password dialog. After unlocking, the
    folder is restored and opened in Explorer.
@@ -61,7 +61,7 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
 
 **Manual test checklist (Windows 10/11)**
 
-1. Install from the CI artifact `folder-locker-setup`. SmartScreen warns
+1. Install from the CI artifact `cloak-setup`. SmartScreen warns
    because the installer is unsigned: *More info → Run anyway*. Since 1.2,
    installing for all users asks for administrator rights once; *Install
    for me only* doesn't.
@@ -72,7 +72,7 @@ encrypted vault files, all in Flutter plus Windows APIs. No paid tools.
    in a small window → the folder is restored and opened in Explorer, and
    the window goes away. Cancelling instead ends the app.
 5. Right-click a folder → *Show more options* (Windows 11) → **Lock with
-   Folder Locker** → the protect dialog opens.
+   Cloak** → the protect dialog opens.
 6. With the app open, double-click another vault → the password dialog
    shows over the app, in the same window (no second window).
 7. **Hide only** → the folder disappears from Explorer; **Show** brings it
@@ -128,7 +128,7 @@ that are left unlocked.
    denied". **Unlock** in the app → it opens normally again.
 2. **Read-only** on a folder → files open, but saving, adding or deleting
    fails. **Unlock** → it can be changed again.
-3. Right-click the blocked folder → **Lock with Folder Locker** → the app
+3. Right-click the blocked folder → **Lock with Cloak** → the app
    offers to unlock it.
 4. With everything locked, close the window → the app quits. Unlock an
    item and close the window → it disappears, and the icon stays next to
@@ -154,7 +154,7 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 | # | Milestone | What it contains | Status |
 |---|-----------|------------------|--------|
 | 2a | Vault format v2 | `Name.flkd` folder: the `.flk` header and key slots (`vault.flk`) and one encrypted file per file. Encrypted names (a random IV per folder, long names), 64 KiB blocks with random access, holes, case-insensitive lookups that keep the case | ✅ unit tests on Linux and Windows |
-| 2b | Drive helper | `folder_locker_drive.exe`, in Rust: JSON lines over stdin/stdout, import and export with a full check, the Dokany file system, closes every drive when the app goes away, runs without Dokany and finds it once it's installed | ✅ end-to-end drive test on Windows with Dokany in CI |
+| 2b | Drive helper | `cloak_drive.exe`, in Rust: JSON lines over stdin/stdout, import and export with a full check, the Dokany file system, closes every drive when the app goes away, runs without Dokany and finds it once it's installed | ✅ end-to-end drive test on Windows with Dokany in CI |
 | 2c | App integration | "Open it as a folder / a drive" when encrypting a folder; Open and Lock on the card, with the drive letter; Decrypt to a folder; the crash journal; drives closed from outside; Settings → Encrypted drives | ✅ logic and UI tests · 🧪 on a real PC |
 | 2d | Packaging | The helper next to the app (CMake and the installer). Dokany comes with the installer (a pinned version, checked by its SHA-256): installed when missing, with one administrator prompt, or later from Settings. CI installs and uninstalls the whole setup. Version 1.2.0 | ✅ installer tested in CI · 🧪 on a real PC |
 
@@ -203,7 +203,7 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
    asks before closing the drive. **Cancel**, close the program, then
    **Lock** again → it closes without asking.
 9. Eject the drive in Explorer → the card shows Locked.
-10. Open a drive, then end Folder Locker in Task Manager → the drive goes
+10. Open a drive, then end Cloak in Task Manager → the drive goes
     away. Start the app again → the item shows Locked.
 11. Double-click `vault.flk` inside `Name.flkd` → the password dialog
     opens it as a drive.
@@ -213,15 +213,15 @@ notes are in [DRIVE_VAULT.md](DRIVE_VAULT.md).
 
 ## Phase 3: Explorer plug-in 🧪
 
-Folder Locker feels built into Explorer: menus that know each item, locked
+Cloak feels built into Explorer: menus that know each item, locked
 items that look locked, and locked folders that ask for the password when
 opened.
 
 | # | Milestone | What it contains | Status |
 |---|-----------|------------------|--------|
 | 3a | Locked drive vault folders | A `Name.flkd` folder shows the vault icon and a tooltip, and inside it only `vault.flk` (the encrypted data is hidden), so opening the folder leads straight to the password dialog. Plain `desktop.ini`: no plug-in or administrator rights needed, and it travels with the vault to other PCs | ✅ checked in the drive test on Windows (attributes, and the shell finds the icon) · 🧪 on a real PC |
-| 3b | Explorer plug-in | `folder_locker_shell.dll`, a user-mode COM server in Rust: no driver, no signature needed to run. Never blocks or crashes Explorer: it only reads the app's list of items and starts the app, and every entry point catches errors. The installer moves a copy that Explorer still has loaded aside, so updates need no restart | ✅ its COM objects tested on Windows in CI · 🧪 on a real PC |
-| 3c | Right-click menu that knows the item | One entry whose title and action follow the item: *Lock with Folder Locker* on new folders and files, *Unlock…* on blocked, read-only and hidden items, *Open…* on drive vaults, *Lock…* on unlocked items and on open drives (right-click `V:`); `.flk` vaults keep their file type's *Unlock…*. The app then does it without asking again. Registered per user, so no administrator rights. Top level on Windows 10; under *Show more options* on Windows 11 | ✅ end to end in CI: registered, shown by Windows' own menu code with the right titles, and run · 🧪 on a real PC |
+| 3b | Explorer plug-in | `cloak_shell.dll`, a user-mode COM server in Rust: no driver, no signature needed to run. Never blocks or crashes Explorer: it only reads the app's list of items and starts the app, and every entry point catches errors. The installer moves a copy that Explorer still has loaded aside, so updates need no restart | ✅ its COM objects tested on Windows in CI · 🧪 on a real PC |
+| 3c | Right-click menu that knows the item | One entry whose title and action follow the item: *Lock with Cloak* on new folders and files, *Unlock…* on blocked, read-only and hidden items, *Open…* on drive vaults, *Lock…* on unlocked items and on open drives (right-click `V:`); `.flk` vaults keep their file type's *Unlock…*. The app then does it without asking again. Registered per user, so no administrator rights. Top level on Windows 10; under *Show more options* on Windows 11 | ✅ end to end in CI: registered, shown by Windows' own menu code with the right titles, and run · 🧪 on a real PC |
 | 3d | Lock badge | A padlock overlay on items that stay in place while protected (Block access, Read-only, Hide only). Registered for all users by the installer (Windows reads overlays only there), shown to each user whose Explorer integration is on, and up to date as soon as the app changes an item. Windows shows at most 15 overlays, and cloud apps use many, so the name starts with a space to come early | ✅ end to end in CI: registered, loaded by Windows' overlay code, shown only on protected items · 🧪 on a real PC |
 | 3e | Windows 11 first-level menu | The same command in a package with external location (sparse package, `installer/sparse`), which Windows 11 needs for its first menu level: just a manifest and logos that point to the app's folder. Windows runs the command from it in a host process. Windows installs such a package only if it trusts its signature, so it ships with the free signing of Phase 4; the classic menu keeps the per-user entry | ✅ built, signed with a throwaway certificate, installed and checked in CI · ⏳ ships with Phase 4 |
 
@@ -241,27 +241,27 @@ opened.
 
 **Manual test checklist for Phase 3 (Windows 10/11)**
 
-1. Install. Right-click a folder → **Lock with Folder Locker** (Windows
+1. Install. Right-click a folder → **Lock with Cloak** (Windows
    11: under **Show more options**) → the app opens the protect dialog.
 2. Protect it with **Block access** → right-click it → **Unlock with
-   Folder Locker** → the app unlocks it without asking again.
-3. Right-click it again → **Lock with Folder Locker** → it's blocked again,
+   Cloak** → the app unlocks it without asking again.
+3. Right-click it again → **Lock with Cloak** → it's blocked again,
    without a dialog.
 4. Lock the app → **Unlock with…** on a blocked folder → the app says to
    unlock it first, then unlocks the folder once the app is unlocked.
 5. Encrypt a folder as **A drive** → the `Name.flkd` folder shows the
    vault icon, its tooltip says what it is, and opening it shows only
    `vault.flk`.
-6. Right-click `Name.flkd` → **Open with Folder Locker** → password →
+6. Right-click `Name.flkd` → **Open with Cloak** → password →
    the drive opens. Right-click the drive (`V:`) → **Lock with Folder
    Locker** → the drive closes.
 7. Right-click `C:`, a `.flk` file (it has the file type's own **Unlock
-   with…**), or several items at once → no Folder Locker entry from the
+   with…**), or several items at once → no Cloak entry from the
    plug-in.
 8. Installed for all users: sign out and in again → blocked, read-only and
    hidden items (with hidden files shown) have a padlock badge. Unlock
    one in the app → its badge goes away at once; lock it → it's back.
-9. Update Folder Locker (Explorer always has the plug-in loaded for the
+9. Update Cloak (Explorer always has the plug-in loaded for the
    badge) → no restart asked; the new version runs after the next sign-in.
    Uninstall → the entry is gone and no restart is asked.
 10. Turn off **Settings → Explorer integration** → the entry, the vault

@@ -68,7 +68,7 @@ class NativeSystemTray implements SystemTray {
     _channel.setMethodCallHandler(_onCall);
   }
 
-  static const MethodChannel _channel = MethodChannel('folder_locker/tray');
+  static const MethodChannel _channel = MethodChannel('cloak/tray');
 
   final StreamController<TrayEvent> _events =
       StreamController<TrayEvent>.broadcast();

@@ -4,7 +4,7 @@ project(desktop_folder_locker LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "folder_locker")
+set(BINARY_NAME "cloak")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -112,13 +112,13 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 # where the app looks for them, with the plug-in's lock badge icon. CI and
 # the installer use the release build.
 set(NATIVE_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}/../native/target/release")
-foreach(NATIVE_FILE folder_locker_drive.exe folder_locker_shell.dll)
+foreach(NATIVE_FILE cloak_drive.exe cloak_shell.dll)
   if(EXISTS "${NATIVE_RELEASE}/${NATIVE_FILE}")
     install(FILES "${NATIVE_RELEASE}/${NATIVE_FILE}"
       DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
   endif()
 endforeach()
-if(EXISTS "${NATIVE_RELEASE}/folder_locker_shell.dll")
+if(EXISTS "${NATIVE_RELEASE}/cloak_shell.dll")
   install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/lock_badge.ico"
     DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
 endif()

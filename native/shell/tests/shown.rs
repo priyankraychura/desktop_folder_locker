@@ -17,7 +17,7 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use folder_locker_shell::shown::{folder_of, shown_folders};
+use cloak_shell::shown::{folder_of, shown_folders};
 use support::{built_dll, long_path};
 use windows::core::{s, Interface, HSTRING};
 use windows::Win32::System::Com::{
@@ -73,8 +73,8 @@ fn same(a: &Path, b: &Path) -> bool {
 fn exported() -> Vec<PathBuf> {
     type ShownFolders = unsafe extern "system" fn(*mut u16, u32) -> i32;
     let module = unsafe { LoadLibraryW(&HSTRING::from(built_dll().as_path())) }.unwrap();
-    let export = unsafe { GetProcAddress(module, s!("FolderLockerShownFolders")) }
-        .expect("the DLL exports FolderLockerShownFolders");
+    let export = unsafe { GetProcAddress(module, s!("CloakShownFolders")) }
+        .expect("the DLL exports CloakShownFolders");
     let shown_folders: ShownFolders = unsafe { std::mem::transmute(export) };
 
     let mut buffer = Vec::new();

@@ -160,7 +160,7 @@ class VaultHeader {
     if (!_sameBytes(fileMagic, magic)) {
       throw const EngineException(
         EngineErrorCode.corruptVault,
-        'This is not a Folder Locker vault',
+        'This is not a Cloak vault',
       );
     }
     final version = reader.u16();
@@ -174,7 +174,7 @@ class VaultHeader {
     if (!known || headerSize != blockSize) {
       throw const EngineException(
         EngineErrorCode.unsupportedVersion,
-        'The vault was created by a newer version of Folder Locker',
+        'The vault was created by a newer version of Cloak',
       );
     }
     final vaultId = reader.bytes(vaultIdLength);
