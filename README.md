@@ -284,3 +284,13 @@ widgets).
 | 4 | Publishing: GitHub Releases, Microsoft Store, free code signing | Planned |
 
 Details are in [docs/PLAN.md](docs/PLAN.md).
+
+## License
+
+Copyright (C) 2026 Priyank Raychura
+
+Folder Locker is free software under the
+[GNU General Public License, version 3](LICENSE) or (at your option) any
+later version. You may use, share and change it, but copies and changed
+versions must stay under the same license, credit the original, and come
+with their source code.

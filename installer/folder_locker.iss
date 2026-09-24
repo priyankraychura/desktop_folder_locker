@@ -56,6 +56,7 @@ AppId={{EEDC761A-C5AA-42F5-985B-00DE48C4C4F2}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
+AppCopyright=Copyright (C) 2026 {#AppPublisher}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
@@ -101,6 +102,8 @@ Name: "dokany"; Description: "Install Dokany, a free driver that opens encrypted
 
 [Files]
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Excludes: "\{#ShellDll}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; The GPL goes along with the app.
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 #ifdef ShellPlugin
 ; Explorer may have it loaded: see MovePluginAway in [Code].
 Source: "{#BuildDir}\{#ShellDll}"; DestDir: "{app}"; Flags: ignoreversion restartreplace uninsrestartdelete

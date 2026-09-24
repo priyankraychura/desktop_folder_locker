@@ -3,6 +3,7 @@ name = "folder-locker-shell"
 description = "Folder Locker's Explorer plug-in: the right-click menu and the lock badge."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [lib]

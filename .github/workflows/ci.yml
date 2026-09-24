@@ -200,7 +200,7 @@ jobs:
             throw "Setup failed with $($process.ExitCode)"
           }
           $app = Join-Path $env:ProgramFiles 'Folder Locker'
-          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'folder_locker_shell.dll', 'lock_badge.ico', 'dokany\Dokan_x64.msi') {
+          foreach ($file in 'folder_locker.exe', 'folder_locker_drive.exe', 'folder_locker_shell.dll', 'lock_badge.ico', 'LICENSE.txt', 'dokany\Dokan_x64.msi') {
             if (-not (Test-Path (Join-Path $app $file))) { throw "$file was not installed" }
           }
           if (-not (Test-Path "$env:WINDIR\System32\dokan2.dll")) {

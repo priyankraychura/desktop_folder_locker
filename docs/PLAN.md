@@ -260,7 +260,8 @@ opened.
 
 ## Phase 4: publishing ⏳
 
-- Choose an open-source license (SignPath's free plan needs one).
+- ✅ An open-source license, which SignPath's free plan needs: GPL-3.0 or
+  later ([LICENSE](../LICENSE)).
 - GitHub Releases with the Inno Setup installer (free). CI already builds
   it on every push.
 - Microsoft Store (free for individual developers; Microsoft signs MSIX).
@@ -298,3 +299,4 @@ opened.
 | One `IExplorerCommand` for both menus | Explorer asks it for the title and state, so the entry follows each item. The classic menu finds it through the per-user `ExplorerCommandHandler`, Windows 11's first level through a package |
 | The lock badge is an icon overlay, registered for the machine | The only way to badge items in Explorer. Windows reads overlays only from `HKLM` and uses the first 15 by name, hence the installer and the leading space |
 | The plug-in answers from memory, refreshed by a change notification | Explorer asks about every file it shows; the notification on the app's folder keeps badges right the moment the app changes an item |
+| GPL-3.0 or later as the license | Free code signing needs an open-source license, and the GPL keeps copies open: whoever reuses the code must credit it and publish theirs under the same license, so nobody can sell a closed copy |

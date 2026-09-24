@@ -6,6 +6,12 @@ abstract final class AppInfo {
   static const String repositoryUrl =
       'https://github.com/priyankraychura/desktop_folder_locker';
 
+  /// The app's license (the LICENSE file).
+  static const String legalese =
+      'Copyright (C) 2026 Priyank Raychura\n'
+      'Free software under the GNU General Public License, version 3 or '
+      'later.';
+
   /// Folder under `%APPDATA%` that holds settings, keys and journals.
   static const String dataFolderName = 'FolderLocker';
 

@@ -3,6 +3,7 @@ name = "flk-vault2"
 description = "Folder Locker drive vaults: encrypted file names and contents (platform independent)."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

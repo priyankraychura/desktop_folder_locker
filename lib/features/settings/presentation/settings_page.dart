@@ -327,6 +327,7 @@ class SettingsPage extends ConsumerWidget {
                 context: context,
                 applicationName: AppInfo.name,
                 applicationVersion: AppInfo.version,
+                applicationLegalese: AppInfo.legalese,
               ),
             ),
           ],

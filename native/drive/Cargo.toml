@@ -3,6 +3,7 @@ name = "folder-locker-drive"
 description = "Mounts Folder Locker drive vaults as a Windows drive (Dokany)."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [[bin]]
