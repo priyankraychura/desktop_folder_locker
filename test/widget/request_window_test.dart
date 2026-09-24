@@ -27,7 +27,7 @@ void main() {
     expect(find.text('Unlock “Taxes”'), findsOneWidget);
     expect(find.byType(LockScreen), findsNothing);
     expect(find.byType(HomeShell), findsNothing);
-    expect(app.window.look, 'request');
+    expect(app.window.look, 'compact');
     expect(app.tray.visible, isFalse, reason: 'the app may quit right after');
 
     await unlockInDialog(tester);
@@ -92,7 +92,7 @@ void main() {
     await settleReal(tester);
     expect(find.text('Unlock “Taxes”'), findsOneWidget);
     expect(find.byType(LockScreen), findsNothing);
-    expect(app.window.look, 'request');
+    expect(app.window.look, 'compact');
 
     await tester.tap(find.text('Cancel'));
     await settleReal(tester);
@@ -164,10 +164,11 @@ void main() {
       await settleReal(tester, rounds: 20);
       expect(app.drives.isMounted(vault), isTrue);
 
-      // Hidden, it could only be found in Task Manager.
+      // Hidden, it could only be found in Task Manager. The app is locked:
+      // its lock screen shows, compact.
       expect(app.window.ended, isFalse);
       expect(app.window.visible, isTrue);
-      expect(app.window.look, 'main');
+      expect(app.window.look, 'compact');
       expect(windowMode(app), WindowMode.main);
       expect(find.byType(LockScreen), findsOneWidget);
 
@@ -182,7 +183,7 @@ void main() {
     await tester.pumpWidget(app.app);
     await settleReal(tester);
     expect(windowMode(app), WindowMode.main);
-    expect(app.window.look, 'main');
+    expect(app.window.look, 'app');
     expect(find.byType(SetupPage), findsOneWidget);
 
     await app.shutdown(tester);

@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../core/constants/app_info.dart';
 import '../core/di/core_providers.dart';
+import '../features/auth/application/session_controller.dart';
 import '../features/items/application/items_controller.dart';
 import '../features/items/application/protection_controller.dart';
 import '../features/settings/application/settings_controller.dart';
@@ -49,15 +50,31 @@ final windowStateProvider = NotifierProvider<WindowController, WindowState>(
   WindowController.new,
 );
 
-/// Decides how the window shows: the app, or just a dialog. Also decides
-/// when the app runs in the background, in the notification area: only
-/// while it has something to look after. Then it quits.
+/// Whether the window is compact, the size of a dialog: for a request,
+/// and for the lock screen, which is just its password form.
+final compactWindowProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(
+        windowStateProvider.select((state) => state.mode == WindowMode.request),
+      ) ||
+      ref.watch(sessionControllerProvider.select(_isLocked)),
+);
+
+bool _isLocked(SessionState session) => session.status == SessionStatus.locked;
+
+/// Decides how the window shows: the app, or just a dialog; compact while
+/// the app is locked. Also decides when the app runs in the background, in
+/// the notification area: only while it has something to look after. Then
+/// it quits.
 class WindowController extends Notifier<WindowState> {
   @override
   WindowState build() {
     ref
       ..listen(itemsControllerProvider, (_, _) => _quitIfDone())
-      ..listen(protectionControllerProvider, (_, _) => _quitIfDone());
+      ..listen(protectionControllerProvider, (_, _) => _quitIfDone())
+      ..listen(sessionControllerProvider.select(_isLocked), (_, _) {
+        _restyle();
+      });
     return ref.read(initialWindowStateProvider);
   }
 
@@ -72,7 +89,7 @@ class WindowController extends Notifier<WindowState> {
   Future<void> showMain() async {
     _inBackground = false;
     state = const WindowState();
-    await _window.showMain();
+    await _window.show(compact: _locked);
   }
 
   /// Shows the window for [intent]. A dialog-only request gets the small
@@ -86,7 +103,7 @@ class WindowController extends Notifier<WindowState> {
     }
     _inBackground = false;
     if (inApp) state = const WindowState(mode: WindowMode.request);
-    await _window.showRequest();
+    await _window.show(compact: true);
   }
 
   /// The small window's request is done. The next one uses the same
@@ -117,6 +134,16 @@ class WindowController extends Notifier<WindowState> {
   Future<void> toBackground() async {
     await _window.hide();
     _inBackground = true;
+  }
+
+  bool get _locked => _isLocked(ref.read(sessionControllerProvider));
+
+  /// The app locked or unlocked: the lock screen is compact, the app large.
+  /// A request's window stays as it is, and a hidden one changes when it
+  /// shows.
+  void _restyle() {
+    if (state.mode != WindowMode.main || _inBackground) return;
+    unawaited(_window.restyle(compact: _locked));
   }
 
   bool get _inTray =>
@@ -154,13 +181,15 @@ class WindowController extends Notifier<WindowState> {
   }
 }
 
-/// The app's native window.
+/// The app's native window, in one of two looks: the app (large and
+/// resizable, with the app's own title bar), or compact (the size of a
+/// dialog, with Windows' title bar).
 abstract interface class AppWindow {
-  /// Shows the app: large and resizable, with the app's own title bar.
-  Future<void> showMain();
+  /// Shows the window with that look, in front.
+  Future<void> show({required bool compact});
 
-  /// Shows a small window with Windows' title bar, for one dialog.
-  Future<void> showRequest();
+  /// Changes the look, without bringing the window forward.
+  Future<void> restyle({required bool compact});
 
   Future<void> hide();
 
@@ -175,10 +204,10 @@ class NoAppWindow implements AppWindow {
   const NoAppWindow();
 
   @override
-  Future<void> showMain() async {}
+  Future<void> show({required bool compact}) async {}
 
   @override
-  Future<void> showRequest() async {}
+  Future<void> restyle({required bool compact}) async {}
 
   @override
   Future<void> hide() async {}
@@ -191,39 +220,46 @@ class NoAppWindow implements AppWindow {
 }
 
 /// The real window, through window_manager. One window takes both looks.
-class NativeAppWindow implements AppWindow {
-  NativeAppWindow({required bool startWithRequest})
-    : _request = startWithRequest;
+class NativeAppWindow with WindowListener implements AppWindow {
+  NativeAppWindow({required bool startCompact})
+    : _compact = startCompact,
+      _target = startCompact;
 
-  static const Size mainSize = Size(1180, 760);
-  static const Size mainMinimumSize = Size(940, 640);
+  static const Size appSize = Size(1180, 760);
+  static const Size appMinimumSize = Size(940, 640);
 
-  /// The dialogs (480 wide, with their margins) and Windows' title bar.
-  static const Size requestSize = Size(560, 540);
+  /// A dialog (480 wide, with its margins) or the lock screen's form, and
+  /// Windows' title bar.
+  static const Size compactSize = Size(560, 540);
 
-  bool _request;
+  /// The look the window has, and the one it should have: a minimized
+  /// window changes when it's restored.
+  bool _compact;
+  bool _target;
   final Completer<void> _ready = Completer<void>();
+  Future<void> _changes = Future.value();
 
   /// Where the app was and whether it was maximized, to put it back after
-  /// a request.
-  Rect? _mainBounds;
-  bool _mainMaximized = false;
+  /// being compact.
+  Rect? _appBounds;
+  bool _appMaximized = false;
 
   /// Connects to the window. It's set up and shown once the first frame is
   /// ready.
   Future<void> start() async {
     await windowManager.ensureInitialized();
+    windowManager.addListener(this);
     final ready = windowManager.waitUntilReadyToShow(
       WindowOptions(
         title: AppInfo.name,
-        size: _request ? requestSize : mainSize,
-        minimumSize: _request ? requestSize : mainMinimumSize,
+        size: _compact ? compactSize : appSize,
+        minimumSize: _compact ? compactSize : appMinimumSize,
         center: true,
-        titleBarStyle: _request ? TitleBarStyle.normal : TitleBarStyle.hidden,
+        titleBarStyle: _compact ? TitleBarStyle.normal : TitleBarStyle.hidden,
         windowButtonVisibility: false,
       ),
       () async {
-        if (_request) await _fixed(true);
+        if (_compact) await _fixed(true);
         await _front();
         _ready.complete();
       },
@@ -232,44 +268,58 @@ class NativeAppWindow implements AppWindow {
   }
 
   @override
-  Future<void> showMain() async {
+  Future<void> show({required bool compact}) async {
     await _ready.future;
-    if (_request) {
-      await _fixed(false);
-      await windowManager.setMinimumSize(mainMinimumSize);
-      await windowManager.setTitleBarStyle(
-        TitleBarStyle.hidden,
-        windowButtonVisibility: false,
-      );
-      final bounds = _mainBounds;
-      if (bounds == null) {
-        await windowManager.setSize(mainSize);
-        await windowManager.center();
-      } else {
-        await windowManager.setBounds(bounds);
-      }
-      if (_mainMaximized) await windowManager.maximize();
-      _request = false;
-    }
+    if (await windowManager.isMinimized()) await windowManager.restore();
+    await restyle(compact: compact);
     await _front();
   }
 
   @override
-  Future<void> showRequest() async {
-    await _ready.future;
-    if (!_request) {
-      _mainMaximized = await windowManager.isMaximized();
-      if (_mainMaximized) await windowManager.unmaximize();
-      _mainBounds = await windowManager.getBounds();
-      // The smaller minimum first, or Windows keeps the window large.
-      await windowManager.setMinimumSize(requestSize);
-      await _fixed(true);
-      await windowManager.setTitleBarStyle(TitleBarStyle.normal);
-      await windowManager.setSize(requestSize);
-      await windowManager.center();
-      _request = true;
-    }
-    await _front();
+  Future<void> restyle({required bool compact}) {
+    _target = compact;
+    return _apply();
+  }
+
+  @override
+  void onWindowRestore() => unawaited(_apply());
+
+  /// Gives the window the look it should have, one change at a time.
+  Future<void> _apply() {
+    final change = _changes.then((_) async {
+      await _ready.future;
+      final compact = _target;
+      if (compact == _compact || await windowManager.isMinimized()) return;
+      if (compact) {
+        _appMaximized = await windowManager.isMaximized();
+        if (_appMaximized) await windowManager.unmaximize();
+        _appBounds = await windowManager.getBounds();
+        // The smaller minimum first, or Windows keeps the window large.
+        await windowManager.setMinimumSize(compactSize);
+        await _fixed(true);
+        await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+        await windowManager.setSize(compactSize);
+        await windowManager.center();
+      } else {
+        await _fixed(false);
+        await windowManager.setMinimumSize(appMinimumSize);
+        await windowManager.setTitleBarStyle(
+          TitleBarStyle.hidden,
+          windowButtonVisibility: false,
+        );
+        final bounds = _appBounds;
+        if (bounds == null) {
+          await windowManager.setSize(appSize);
+          await windowManager.center();
+        } else {
+          await windowManager.setBounds(bounds);
+        }
+        if (_appMaximized) await windowManager.maximize();
+      }
+      _compact = compact;
+    });
+    _changes = change.then((_) {}, onError: (_) {});
+    return change;
   }
 
   @override

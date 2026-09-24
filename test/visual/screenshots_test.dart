@@ -8,6 +8,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:desktop_folder_locker/app/app_window.dart';
 import 'package:desktop_folder_locker/engine/drive/drive_service.dart';
 import 'package:desktop_folder_locker/features/items/application/items_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
@@ -205,8 +206,14 @@ void main() {
     await tester.pumpAndSettle();
     await capture('11_items_dark');
 
-    // Lock screen.
+    // Lock screen, in its compact window (without Windows' title bar).
     await tester.tap(find.text('Lock app'));
+    tester.view.physicalSize =
+        Size(
+          NativeAppWindow.compactSize.width,
+          NativeAppWindow.compactSize.height - 32,
+        ) *
+        _scale;
     await tester.pumpAndSettle();
     await capture('12_lock_dark');
     await tester.runAsync(

@@ -6,22 +6,21 @@ class FakeAppWindow implements AppWindow {
 
   bool visible;
 
-  /// `main` or `request`: how it was shown last.
+  /// `app` or `compact`: its look, once it was set.
   String? look;
 
   /// Whether the app was closed.
   bool ended = false;
 
   @override
-  Future<void> showMain() async {
+  Future<void> show({required bool compact}) async {
     visible = true;
-    look = 'main';
+    await restyle(compact: compact);
   }
 
   @override
-  Future<void> showRequest() async {
-    visible = true;
-    look = 'request';
+  Future<void> restyle({required bool compact}) async {
+    look = compact ? 'compact' : 'app';
   }
 
   @override

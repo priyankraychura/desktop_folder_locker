@@ -68,9 +68,11 @@ Rules that keep the code consistent:
    integration setting.
 4. **Window.** It sets up the window with `window_manager`
    (`app/app_window.dart`) and shows it once the first frame is ready.
-   Usually that's the app: large, with a custom title bar. When Explorer
-   started the app to open a locked item (`--open`), it's a small window
-   with Windows' title bar and only the password dialog (below).
+   The app is large, with a custom title bar. The window is compact
+   instead, the size of a dialog with Windows' title bar, while the app is
+   locked (the lock screen is just its password form), and for a request
+   that needs only a dialog (below). Once set up, the app starts locked, so
+   it starts compact.
 5. **UI.** It starts the UI. `AppGate` shows setup, the lock screen or the
    home shell, depending on the session state.
 
@@ -526,9 +528,11 @@ recovery key.
   there, call `AllowSetForegroundWindow` and exit.
 - **Window.** The runner doesn't show the window by itself. Dart shows it
   after the first frame, so there is no white flash. The title bar is
-  custom-drawn with `window_manager`. For a request that needs only a
-  dialog, the same window turns small and fixed, with Windows' title bar
-  (`NativeAppWindow`), and back when the app is shown.
+  custom-drawn with `window_manager`. While the app is locked, and for a
+  request that needs only a dialog, the same window is compact: small and
+  fixed, with Windows' title bar (`NativeAppWindow`). Unlocking puts it
+  back where it was, maximized if it was. A minimized window changes when
+  it's restored.
 
 ## 8. Security model
 

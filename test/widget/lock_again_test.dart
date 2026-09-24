@@ -54,7 +54,7 @@ void main() {
     expect(find.text('Lock “Taxes” again?'), findsOneWidget);
     expect(find.text('You closed it in Explorer.'), findsOneWidget);
     expect(find.text('Master password'), findsNothing, reason: 'key kept');
-    expect(app.window.look, 'request');
+    expect(app.window.look, 'compact');
     expect(app.window.visible, isTrue);
 
     await tester.tap(find.text('Lock'));
@@ -121,7 +121,7 @@ void main() {
       await explorerShows(tester, app, [folder]);
       await explorerShows(tester, app, []);
       expect(find.text('Lock “Photos” again?'), findsOneWidget);
-      expect(app.window.look, 'request');
+      expect(app.window.look, 'compact');
 
       await tester.enterText(find.byType(TextField), 'wrong password');
       await tester.tap(find.text('Lock'));

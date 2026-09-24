@@ -25,8 +25,9 @@ import 'app_window.dart';
 ///    its arguments to the first one and exits before showing a window.
 /// 2. Services are created and injected with Riverpod overrides.
 /// 3. The window is configured and shown: the app with its custom title
-///    bar, or, when Explorer started it to open a locked item, just the
-///    password dialog in a small window.
+///    bar, or compact, the size of a dialog: for the lock screen, and when
+///    Explorer started the app to open a locked item, just its password
+///    dialog.
 Future<void> bootstrap(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -43,8 +44,12 @@ Future<void> bootstrap(List<String> args) async {
   final isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
   final startWithRequest =
       isDesktop && (LaunchIntent.parse(args)?.dialogOnly ?? false);
+  // Once set up, the app starts locked: its lock screen is compact too.
   final window = isDesktop
-      ? NativeAppWindow(startWithRequest: startWithRequest)
+      ? NativeAppWindow(
+          startCompact:
+              startWithRequest || File(paths.keystoreFile).existsSync(),
+        )
       : null;
 
   final crypto = await CryptoService.create();
