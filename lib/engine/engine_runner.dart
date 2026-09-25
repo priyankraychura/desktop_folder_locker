@@ -9,6 +9,7 @@ import 'crypto/crypto_service.dart';
 import 'crypto/kdf_params.dart';
 import 'engine_exception.dart';
 import 'format/key_slot.dart';
+import 'format/vault_header.dart';
 import 'operations/lock_operation.dart';
 import 'operations/operation_progress.dart';
 import 'operations/rekey_operation.dart';
@@ -90,6 +91,22 @@ class EngineRunner {
           slots.recoveryPublicKey,
         ),
       );
+
+  /// Locks with keys made ahead (see [PreparedVault]), which the caller
+  /// keeps. If it fails with [EngineException.keysUsed], they must not be
+  /// used again.
+  EngineJob<LockResult> lockPrepared(
+    LockRequest request,
+    PreparedVault prepared,
+  ) => _start(
+    _LockSpec(
+      request,
+      null,
+      null,
+      null,
+      prepared: (prepared.header, _crypto.toTransferrable(prepared.dataKey)),
+    ),
+  );
 
   EngineJob<UnlockResult> unlock(
     UnlockRequest request,
@@ -344,25 +361,44 @@ final class _DeriveSpec extends _JobSpec<_TransferKey?> {
 }
 
 final class _LockSpec extends _JobSpec<LockResult> {
-  const _LockSpec(this.request, this.master, this.custom, this.recovery);
+  const _LockSpec(
+    this.request,
+    this.master,
+    this.custom,
+    this.recovery, {
+    this.prepared,
+  });
 
   final LockRequest request;
   final _TransferKey? master;
   final _TransferKey? custom;
   final Uint8List? recovery;
+  final (VaultHeader, TransferrableSecureKey)? prepared;
 
   @override
   LockResult run(_WorkerContext context) {
+    final operation = LockOperation(
+      crypto: context.crypto,
+      progress: context.progress,
+      cancel: context.cancel,
+    );
+    if (prepared case (final header, final dataKey)) {
+      final keys = PreparedVault(
+        header: header,
+        dataKey: context.crypto.fromTransferrable(dataKey),
+      );
+      try {
+        return operation.run(request, prepared: keys);
+      } finally {
+        keys.dispose();
+      }
+    }
     final masterKey = context.materialize(master);
     final customKey = context.materialize(custom);
     try {
-      return LockOperation(
-        crypto: context.crypto,
-        progress: context.progress,
-        cancel: context.cancel,
-      ).run(
+      return operation.run(
         request,
-        VaultSlotsSpec(
+        slots: VaultSlotsSpec(
           master: masterKey,
           custom: customKey,
           recoveryPublicKey: recovery,

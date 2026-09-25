@@ -76,6 +76,25 @@ class UnlockedKey {
   final DerivedKey? derivedKey;
 }
 
+/// The keys of an item's next vault, made while a password (or the
+/// session's key) was at hand, so the item can be locked again later
+/// without one: a new vault id and data key, and key slots that already
+/// hold that data key for its passwords and the recovery key.
+///
+/// The data key opens only that one vault, of files that are unlocked on
+/// the disk meanwhile. It's used for one vault only: its payload nonces
+/// count from zero, so a second vault with the same keys would repeat
+/// them.
+class PreparedVault {
+  PreparedVault({required this.header, required this.dataKey});
+
+  /// The new vault's header: its id, chunk size and key slots.
+  final VaultHeader header;
+  final SecureKey dataKey;
+
+  void dispose() => dataKey.dispose();
+}
+
 /// Creates and opens key slots.
 class VaultKeys {
   VaultKeys(this._crypto);
@@ -105,6 +124,31 @@ class VaultKeys {
     if (spec.recoveryPublicKey case final publicKey?)
       recoverySlot(publicKey: publicKey, vaultId: vaultId, dataKey: dataKey),
   ];
+
+  /// Makes the keys of a vault to write later (see [PreparedVault]).
+  PreparedVault prepare(
+    VaultSlotsSpec spec, {
+    int chunkSize = VaultHeader.defaultChunkSize,
+  }) {
+    final vaultId = _crypto.randomBytes(VaultHeader.vaultIdLength);
+    final dataKey = _crypto.randomKey();
+    return PreparedVault(
+      header: VaultHeader(
+        vaultId: vaultId,
+        chunkSize: chunkSize,
+        slots: buildSlots(
+          prefix: VaultHeader.buildPrefix(
+            vaultId: vaultId,
+            chunkSize: chunkSize,
+          ),
+          vaultId: vaultId,
+          dataKey: dataKey,
+          spec: spec,
+        ),
+      ),
+      dataKey: dataKey,
+    );
+  }
 
   PasswordKeySlot passwordSlot({
     required KeySlotType type,

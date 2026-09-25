@@ -24,6 +24,7 @@ import '../domain/protected_item.dart';
 import 'item_key_cache.dart';
 import 'items_controller.dart';
 import 'path_guard.dart';
+import 'relock_keys.dart';
 
 enum OperationKind {
   locking,
@@ -142,6 +143,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
 
   ItemsController get _items => ref.read(itemsControllerProvider.notifier);
   ItemKeyCache get _cache => ref.read(itemKeyCacheProvider);
+  RelockKeys get _relock => ref.read(relockKeysProvider);
   SessionState get _session => ref.read(sessionControllerProvider);
   EngineRunner get _runner => ref.read(engineRunnerProvider);
   String get _journalDir => ref.read(appPathsProvider).journalDir;
@@ -187,13 +189,16 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     // Closing a drive needs no key.
     if (!item.method.encrypts || item.isMounted) return LockRequirement.none;
     final cached = _cache[item.id]?.slotType;
+    // Keys made when it was unlocked lock it without a password.
+    final prepared =
+        item.method == ProtectionMethod.encrypt && _relock.has(item.id);
     return switch (item.passwordMode) {
       PasswordMode.master =>
-        _session.isUnlocked || cached == KeySlotType.masterPassword
+        _session.isUnlocked || cached == KeySlotType.masterPassword || prepared
             ? LockRequirement.none
             : LockRequirement.appUnlock,
       PasswordMode.custom =>
-        cached == KeySlotType.customPassword
+        cached == KeySlotType.customPassword || prepared
             ? LockRequirement.none
             : LockRequirement.customPassword,
     };
@@ -471,6 +476,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
         unlockedAt: DateTime.now(),
       );
       await _items.upsert(updated);
+      await _prepareRelock(updated);
       ShellActions.notifyChanged(vaultPath);
       ShellActions.notifyChanged(result.restoredPath);
       return UnlockOutcome(
@@ -569,6 +575,8 @@ class ProtectionController extends Notifier<ActiveOperation?> {
         updatedAt: DateTime.now(),
       );
       await _items.upsert(adopted);
+      // Its password mode is known only now.
+      await _prepareRelock(adopted);
       return UnlockOutcome(adopted, renamed: outcome.renamed);
     } on Object {
       if (FsUtils.exists(vaultPath)) await _items.remove(placeholder.id);
@@ -614,6 +622,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
       throw const ProtectionException(ProtectionIssue.stillProtected);
     }
     _cache.remove(item.id);
+    _relock.remove(item.id);
     await _items.remove(item.id);
   }
 
@@ -791,12 +800,53 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     }
   }
 
+  /// Makes the keys of [item]'s next vault while a key for it is at hand,
+  /// so it locks again later without a password (see [RelockKeys]).
+  Future<void> _prepareRelock(ProtectedItem item) async {
+    if (item.method != ProtectionMethod.encrypt) return;
+    try {
+      final spec = await _slotsFor(item, null);
+      // A vault for an older master password would need that one.
+      if (!spec.current) return;
+      final prepared = VaultKeys(ref.read(cryptoProvider)).prepare(spec.slots);
+      try {
+        _relock.save(item.id, prepared);
+      } finally {
+        prepared.dispose();
+      }
+    } on Object {
+      // Locking it again asks for a password instead.
+    }
+  }
+
+  /// Whether a vault with [prepared]'s keys opens with the current master
+  /// password (or doesn't use it).
+  bool _isCurrent(ProtectedItem item, PreparedVault prepared) {
+    if (item.passwordMode != PasswordMode.master) return true;
+    final salt = _session.keystore?.kdf.salt;
+    return salt != null &&
+        prepared.header.slots.any(
+          (slot) =>
+              slot is PasswordKeySlot &&
+              slot.isMaster &&
+              listEquals(slot.kdf.salt, salt),
+        );
+  }
+
   Future<ProtectedItem> _encrypt(
     ProtectedItem item,
     String? customPassword,
   ) async {
-    final spec = await _slotsFor(item, customPassword);
-    var newCustomKey = spec.newCustomKey;
+    ({VaultSlotsSpec slots, DerivedKey? newCustomKey, bool current})? spec;
+    PreparedVault? prepared;
+    try {
+      spec = await _slotsFor(item, customPassword);
+    } on ProtectionException {
+      // No key at hand: the keys made when it was unlocked, if any.
+      prepared = customPassword == null ? _relock.read(item.id) : null;
+      if (prepared == null) rethrow;
+    }
+    var newCustomKey = spec?.newCustomKey;
     try {
       final vaultPath = FsUtils.freePath(
         p.join(
@@ -804,18 +854,27 @@ class ProtectionController extends Notifier<ActiveOperation?> {
           '${p.basename(item.itemPath)}${AppInfo.vaultExtension}',
         ),
       );
-      final result = await _track(
-        _runner.lock(
-          LockRequest(
-            operationId: _newId(),
-            itemPath: item.itemPath,
-            vaultPath: vaultPath,
-            journalDir: _journalDir,
-            tag: item.id,
-          ),
-          spec.slots,
-        ),
+      final request = LockRequest(
+        operationId: _newId(),
+        itemPath: item.itemPath,
+        vaultPath: vaultPath,
+        journalDir: _journalDir,
+        tag: item.id,
       );
+      final LockResult result;
+      try {
+        result = await _track(
+          prepared == null
+              ? _runner.lock(request, spec!.slots)
+              : _runner.lockPrepared(request, prepared),
+        );
+      } on EngineException catch (error) {
+        // Written with once, they can't be used again.
+        if (error.keysUsed) _relock.remove(item.id);
+        rethrow;
+      }
+      // Its next unlock makes new ones.
+      _relock.remove(item.id);
       if (newCustomKey != null) {
         // Remember it so "Lock again" won't ask for the password twice.
         _cache.put(item.id, newCustomKey, KeySlotType.customPassword);
@@ -826,10 +885,11 @@ class ProtectionController extends Notifier<ActiveOperation?> {
         vaultPath: result.vaultPath,
         sizeBytes: result.totalBytes,
         fileCount: result.fileCount,
-        needsPassword: !spec.current,
+        needsPassword: !(spec?.current ?? _isCurrent(item, prepared!)),
       );
     } finally {
       newCustomKey?.dispose();
+      prepared?.dispose();
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:desktop_folder_locker/app/app_window.dart';
 import 'package:desktop_folder_locker/features/auth/application/session_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/items_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
+import 'package:desktop_folder_locker/features/items/application/relock_keys.dart';
 import 'package:desktop_folder_locker/features/items/domain/protected_item.dart';
 import 'package:desktop_folder_locker/features/settings/domain/app_settings.dart';
 import 'package:desktop_folder_locker/features/shell/application/launch_intents.dart';
@@ -48,13 +49,16 @@ Future<AppHarness> desktopHarness(
 /// the app, as after a restart. Returns the vault.
 ///
 /// The folders named in [unlocked] are locked and unlocked again first,
-/// while the app is unlocked: they need the master password to lock again
-/// once the app is locked.
+/// while the app is unlocked: they lock again without a password, with the
+/// keys made as they were unlocked. Without [relockKeys] (as unlocked by
+/// an older version), they need the master password once the app is
+/// locked.
 Future<String> lockedFolder(
   WidgetTester tester,
   AppHarness harness, {
   ProtectionMethod method = ProtectionMethod.encrypt,
   List<String> unlocked = const [],
+  bool relockKeys = true,
 }) async {
   late String vault;
   await tester.runAsync(() async {
@@ -86,7 +90,12 @@ Future<String> lockedFolder(
 
     vault = (await protect('Taxes', method)).vaultPath!;
     for (final name in unlocked) {
-      await protection.unlock(await protect(name, ProtectionMethod.encrypt));
+      final item = await protection.unlock(
+        await protect(name, ProtectionMethod.encrypt),
+      );
+      if (!relockKeys) {
+        harness.container.read(relockKeysProvider).remove(item.item.id);
+      }
     }
     session.lock();
   });

@@ -11,6 +11,7 @@ import '../../engine/engine_runner.dart';
 import '../../platform/access_control.dart';
 import '../../platform/dokany_setup.dart';
 import '../../platform/explorer_folders.dart';
+import '../../platform/key_protector.dart';
 import '../../platform/system_tray.dart';
 import '../../platform/user_folders.dart';
 import '../storage/app_paths.dart';
@@ -23,6 +24,13 @@ final appPathsProvider = Provider<AppPaths>(
 /// libsodium for the UI isolate. Overridden in `bootstrap()`.
 final cryptoProvider = Provider<CryptoService>(
   (ref) => throw UnimplementedError('cryptoProvider must be overridden'),
+);
+
+/// Protects the keys the app keeps on the disk (see `RelockKeys`).
+final keyProtectorProvider = Provider<KeyProtector>(
+  (ref) => Platform.isWindows
+      ? const DpapiKeyProtector()
+      : const PlainKeyProtector(),
 );
 
 /// Password hashing cost. Tests override this with [KdfPolicy.fast].

@@ -101,11 +101,25 @@ a toast says so.
 
 The app runs in the background, in the notification area, only while it
 has something to look after: unlocked items, to remind about them and
-ask to lock them again (with the icon on), or open drives, which it
-serves (`WindowController`). Otherwise closing its window, or finishing
-a request, quits it, and in the background it quits once the last item
-is locked again. It never stays hidden without the icon: an open drive
-then shows the app.
+ask to lock them again, or open drives, which it serves
+(`WindowController`). Otherwise closing its window, or finishing a
+request, quits it, and in the background it quits once the last item is
+locked again. Without the icon, a request that unlocked a folder still
+leaves the app hidden in the background while "Ask to lock when closed"
+is on, to ask once the folder's Explorer window closes (starting the app
+again shows it); an open drive shows the app instead.
+
+An encrypted item locks again without a password, even after the app
+locked or quit, or Windows restarted (`RelockKeys`): as it is unlocked,
+while a key for it is at hand, the app makes the keys of its next vault
+(`PreparedVault`: a new vault id and data key, and key slots that already
+hold that data key for its passwords and the recovery key). The data key
+is kept in `%APPDATA%\FolderLocker\relock`, protected with Windows' Data
+Protection API for this user; it opens only that next vault, of files
+that are unlocked on the disk meanwhile anyway. Each is used for one
+vault, since payload nonces count from zero: a lock that failed after
+writing with it drops it (`EngineException.keysUsed`). A new master
+password or recovery key updates their slots.
 
 ## 3. Vault format (`.flk`, version 1)
 

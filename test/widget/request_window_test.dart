@@ -128,11 +128,18 @@ void main() {
   group('without the notification-area icon', () {
     const noIcon = AppSettings(keepRunningInTray: false);
 
-    testWidgets('an unlocked folder doesn\'t keep the app', (tester) async {
+    // With "Ask to lock when closed" on, it waits for the folder's window
+    // to close (see lock_again_test.dart).
+    testWidgets('an unlocked folder doesn\'t keep the app if nothing asks', (
+      tester,
+    ) async {
       final app = await desktopHarness(
         tester,
         initialWindow: startedByExplorer,
-        settings: noIcon,
+        settings: const AppSettings(
+          keepRunningInTray: false,
+          askToLockWhenClosed: false,
+        ),
       );
       final vault = await lockedFolder(tester, app);
       openFromExplorer(app, vault);

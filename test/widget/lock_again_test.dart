@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:desktop_folder_locker/app/app_window.dart';
 import 'package:desktop_folder_locker/features/auth/presentation/lock_screen.dart';
 import 'package:desktop_folder_locker/features/items/application/folder_window_watcher.dart';
+import 'package:desktop_folder_locker/features/settings/domain/app_settings.dart';
 import 'package:desktop_folder_locker/platform/system_tray.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -138,9 +139,52 @@ void main() {
   });
 
   group('an item unlocked before the app locked', () {
-    testWidgets('asks for the master password to lock it', (tester) async {
+    testWidgets('locks without a password once its window closes', (
+      tester,
+    ) async {
       final app = await desktopHarness(tester, windowVisible: false);
       await lockedFolder(tester, app, unlocked: ['Photos']);
+      await tester.pumpWidget(app.app);
+      await settleReal(tester);
+      final folder = app.userPath('Photos');
+
+      await explorerShows(tester, app, [folder]);
+      await explorerShows(tester, app, []);
+      expect(find.text('Lock “Photos” again?'), findsOneWidget);
+      expect(find.text('Master password'), findsNothing, reason: 'keys kept');
+
+      await tester.tap(find.text('Lock'));
+      await settleReal(tester, rounds: 20);
+      expect(Directory(folder).existsSync(), isFalse);
+      expect(File('$folder.flk').existsSync(), isTrue);
+      await settleUntil(tester, () => app.window.ended);
+      expect(app.window.ended, isTrue);
+
+      await app.shutdown(tester);
+    });
+
+    testWidgets('the notification area locks it without asking', (
+      tester,
+    ) async {
+      final app = await desktopHarness(tester, windowVisible: false);
+      await lockedFolder(tester, app, unlocked: ['Photos']);
+      await tester.pumpWidget(app.app);
+      await settleReal(tester);
+      expect(trayEntry(app, 'lockAll').enabled, isTrue);
+
+      app.tray.select('lockAll');
+      await settleReal(tester, rounds: 20);
+      expect(File('${app.userPath('Photos')}.flk').existsSync(), isTrue);
+      expect(find.byType(Dialog), findsNothing, reason: 'nothing to ask');
+
+      await app.shutdown(tester);
+    });
+  });
+
+  group('an item unlocked without the keys to lock it again', () {
+    testWidgets('asks for the master password to lock it', (tester) async {
+      final app = await desktopHarness(tester, windowVisible: false);
+      await lockedFolder(tester, app, unlocked: ['Photos'], relockKeys: false);
       await tester.pumpWidget(app.app);
       await settleReal(tester);
       final folder = app.userPath('Photos');
@@ -170,7 +214,7 @@ void main() {
       tester,
     ) async {
       final app = await desktopHarness(tester, windowVisible: false);
-      await lockedFolder(tester, app, unlocked: ['Photos']);
+      await lockedFolder(tester, app, unlocked: ['Photos'], relockKeys: false);
       await tester.pumpWidget(app.app);
       await settleReal(tester);
 
@@ -187,6 +231,37 @@ void main() {
 
       await app.shutdown(tester);
     });
+  });
+
+  testWidgets('without the notification-area icon, it still asks', (
+    tester,
+  ) async {
+    final app = await desktopHarness(
+      tester,
+      initialWindow: startedByExplorer,
+      settings: const AppSettings(keepRunningInTray: false),
+    );
+    final vault = await lockedFolder(tester, app);
+    openFromExplorer(app, vault);
+    await tester.pumpWidget(app.app);
+    await settleReal(tester);
+    await unlockInDialog(tester);
+    expect(app.window.visible, isFalse, reason: 'waits in the background');
+    expect(app.window.ended, isFalse);
+    expect(app.tray.visible, isFalse);
+
+    final folder = app.userPath('Taxes');
+    await explorerShows(tester, app, [folder]);
+    await explorerShows(tester, app, []);
+    expect(find.text('Lock “Taxes” again?'), findsOneWidget);
+
+    await tester.tap(find.text('Lock'));
+    await settleReal(tester, rounds: 20);
+    expect(File('$folder.flk').existsSync(), isTrue);
+    await settleUntil(tester, () => app.window.ended);
+    expect(app.window.ended, isTrue, reason: 'nothing left to look after');
+
+    await app.shutdown(tester);
   });
 
   testWidgets('with the app open, the question shows over it', (tester) async {

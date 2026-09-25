@@ -111,7 +111,12 @@ class WindowController extends Notifier<WindowState> {
 
   /// The small window's request is done. The next one uses the same
   /// window, and requests that need the app get it. Otherwise the app goes
-  /// to the notification area, or quits if it has nothing to look after.
+  /// to the background, or quits if it has nothing to look after.
+  ///
+  /// Without the notification-area icon, it still stays in the background,
+  /// hidden, while it waits for an unlocked folder's Explorer window to
+  /// close: starting the app again shows it. An open drive shows the app
+  /// instead, so it isn't forgotten.
   Future<void> finishRequest() async {
     if (state.mode != WindowMode.request) return;
     final pending = ref.read(launchIntentsProvider);
@@ -121,8 +126,7 @@ class WindowController extends Notifier<WindowState> {
       await _window.hide();
       return _quit();
     }
-    // Hidden without the icon, there'd be no way back to the app.
-    if (!_inTray) return showMain();
+    if (!_inTray && _hasOpenDrive()) return showMain();
     await _window.hide();
     _inBackground = true;
     state = const WindowState();
@@ -154,16 +158,22 @@ class WindowController extends Notifier<WindowState> {
       ref.read(systemTrayProvider).isAvailable;
 
   /// Open drives need the app, which serves them. Unlocked items need it
-  /// when it runs in the notification area, to remind about them and ask
-  /// to lock them again.
+  /// when it runs in the notification area, to remind about them, and
+  /// while it asks to lock them again once their Explorer window closes.
   bool _needed() {
+    if (_hasOpenDrive()) return true;
     final items = ref.read(itemsControllerProvider.notifier);
-    if (items.items.any((item) => item.isMounted)) return true;
-    return _inTray &&
+    return (_inTray ||
+            ref.read(settingsControllerProvider).askToLockWhenClosed) &&
         items.items.any(
           (item) => !item.isProtected && items.existsOnDisk(item),
         );
   }
+
+  bool _hasOpenDrive() => ref
+      .read(itemsControllerProvider.notifier)
+      .items
+      .any((item) => item.isMounted);
 
   /// In the background, the app quits once it has nothing left to look
   /// after: everything is locked again, and nothing is going on.
