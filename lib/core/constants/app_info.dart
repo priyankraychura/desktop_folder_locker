@@ -5,7 +5,7 @@
 /// registry ids, the `.flk` extension and the vault format's labels.
 abstract final class AppInfo {
   static const String name = 'Cloak';
-  static const String version = '1.3.0';
+  static const String version = '1.3.1';
   static const String tagline = 'Encrypt and hide your folders on Windows';
   static const String repositoryUrl =
       'https://github.com/priyankraychura/desktop_folder_locker';

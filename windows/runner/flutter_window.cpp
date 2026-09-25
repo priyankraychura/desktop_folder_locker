@@ -184,6 +184,21 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Windows signs out or shuts down, or an installer updating the app asks
+  // it to close (Restart Manager). Closing the window only hides the app in
+  // the notification area, so quit instead: its files can then be replaced.
+  // Unlocked items stay as they are, the drive helper stops once the app is
+  // gone, and the journal finishes an interrupted operation next time.
+  switch (message) {
+    case WM_QUERYENDSESSION:
+      return TRUE;
+    case WM_ENDSESSION:
+      if (wparam) {
+        ::DestroyWindow(hwnd);
+      }
+      return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

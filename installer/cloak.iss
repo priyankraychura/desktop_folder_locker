@@ -6,7 +6,7 @@
 ;   cargo build --release -p cloak-drive -p cloak-shell   (in native\)
 ;   flutter build windows --release                  (copies both next to the app)
 ;   pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
-;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.0 installer\cloak.iss
+;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.1 installer\cloak.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml). Without the Dokany step, the installer links to
@@ -54,7 +54,7 @@
 #endif
 
 #ifndef AppVersion
-  #define AppVersion "1.3.0"
+  #define AppVersion "1.3.1"
 #endif
 
 [Setup]
@@ -90,8 +90,10 @@ WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
 ; Close a running copy before replacing its files. Not Explorer, which
-; loads the plug-in: see MovePluginAway in [Code].
-CloseApplications=yes
+; loads the plug-in: see MovePluginAway in [Code]. Force: a copy that
+; doesn't quit when asked (1.3.0 and older hide in the notification area
+; instead) is ended, rather than failing with "DeleteFile failed; code 5".
+CloseApplications=force
 CloseApplicationsFilter=*.exe,*.chm
 RestartApplications=no
 ; Tell Explorer to refresh file icons after the .flk association changes.

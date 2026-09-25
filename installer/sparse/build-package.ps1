@@ -13,11 +13,11 @@ Install it for the current user next to the installed app with:
   Add-AppxPackage -Path <package> -ExternalLocation <app folder>
 
 .EXAMPLE
-pwsh installer\sparse\build-package.ps1 -Publisher 'CN=Cloak Test' -Version 1.3.0 -Destination build\sparse -Certificate test.pfx -Password test
+pwsh installer\sparse\build-package.ps1 -Publisher 'CN=Cloak Test' -Version 1.3.1 -Destination build\sparse -Certificate test.pfx -Password test
 #>
 param(
     [Parameter(Mandatory)] [string] $Publisher,
-    # The app's version, like 1.3.0.
+    # The app's version, like 1.3.1.
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $Destination,
     [string] $Certificate,
