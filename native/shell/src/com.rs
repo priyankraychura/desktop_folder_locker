@@ -287,11 +287,17 @@ impl IShellIconOverlayIdentifier_Impl for Badge_Impl {
     }
 }
 
-/// The entry for the selection: only single file system items get one.
+/// The entry for the selection: only single file system items get one,
+/// and none while Explorer integration is off in the app (the packaged
+/// menus can't be removed from the registry).
 fn selected_command(items: Ref<IShellItemArray>) -> Result<Option<Command>> {
     let Some(items) = items.as_ref() else {
         return Ok(None);
     };
+    let (listed, settings) = state().now();
+    if !settings.explorer_integration {
+        return Ok(None);
+    }
     if unsafe { items.GetCount()? } != 1 {
         return Ok(None);
     }
@@ -302,7 +308,7 @@ fn selected_command(items: Ref<IShellItemArray>) -> Result<Option<Command>> {
     };
     let path = unsafe { take_string(name) };
     let is_dir = std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir());
-    Ok(command_for(&path, is_dir, &state().items()))
+    Ok(command_for(&path, is_dir, &listed))
 }
 
 /// Starts the app, next to this DLL, with the command. It inherits none

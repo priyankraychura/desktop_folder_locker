@@ -178,4 +178,43 @@ fn the_badge_shows_on_protected_items(place: &Place) {
     let mut small = [0u16; 4];
     assert!(unsafe { badge.GetOverlayInfo(&mut small, &mut index, &mut flags) }.is_err());
     assert_eq!(unsafe { badge.GetPriority() }.unwrap(), 0);
+    drop(badge);
+    explorer_integration_off_hides_everything(place);
+}
+
+/// Last: the app's setting turns off the entry (from both class ids, as
+/// packaged menus can't be removed from the registry) and the badge.
+fn explorer_integration_off_hides_everything(place: &Place) {
+    let make = |clsid: &GUID| -> IExplorerCommand {
+        unsafe {
+            class_factory(clsid)
+                .unwrap()
+                .CreateInstance(None::<&IUnknown>)
+        }
+        .unwrap()
+    };
+    let command = make(&CLSID_MENU);
+    let packaged = make(&CLSID_MENU_PACKAGED);
+    let badge: IShellIconOverlayIdentifier = unsafe {
+        class_factory(&CLSID_BADGE)
+            .unwrap()
+            .CreateInstance(None::<&IUnknown>)
+    }
+    .unwrap();
+    let folder = selection(&[&place.folder]);
+    assert!(entry(&command, &folder).is_some());
+
+    let settings = place.root.join(r"AppData\FolderLocker\settings.json");
+    std::fs::write(&settings, r#"{"explorerIntegration": false}"#).unwrap();
+    // The plug-in sees the change through a change notification.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while entry(&command, &folder).is_some() {
+        assert!(std::time::Instant::now() < deadline, "the entry stays");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    assert_eq!(entry(&packaged, &folder), None);
+    assert_eq!(entry(&command, &selection(&[&place.blocked])), None);
+    assert_eq!(badge_on(&badge, &place.blocked), S_FALSE);
+    assert!(unsafe { command.Invoke(&folder, None::<&IBindCtx>) }.is_err());
+    std::fs::remove_file(&settings).unwrap();
 }

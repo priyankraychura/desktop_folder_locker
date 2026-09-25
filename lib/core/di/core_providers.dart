@@ -35,6 +35,10 @@ final executablePathProvider = Provider<String>(
       throw UnimplementedError('executablePathProvider must be overridden'),
 );
 
+/// Whether this is the Microsoft Store version (see `AppPackage`), which
+/// leaves the Explorer entries to its package. Overridden in `bootstrap()`.
+final storeAppProvider = Provider<bool>((ref) => false);
+
 /// Environment variables (used to find system folders that must not be
 /// locked). Tests override it so temporary folders are allowed.
 final environmentProvider = Provider<Map<String, String>>(

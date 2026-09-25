@@ -137,6 +137,22 @@ the same administrator prompt. You can also install it later with **Install
 Dokany** in **Settings → Encrypted drives**, which also shows whether it's
 ready.
 
+### Microsoft Store version
+
+CI also builds an MSIX package for the Microsoft Store
+([installer/msix](installer/msix)), which the Store signs. It works like
+the Setup version, with these differences:
+
+- **Lock with Cloak** is on the first level of Windows 11's right-click
+  menu.
+- It has no lock badge: a package can't add one.
+- It can't install Dokany. **Settings → Encrypted drives** links to
+  Dokany's download instead.
+- It installs for each user separately.
+
+Both versions keep their data in the same place, so your items, settings
+and vaults stay when you switch. Install only one of them at a time.
+
 ## Build from source
 
 Requirements:
@@ -182,6 +198,21 @@ copy C:\Windows\System32\vcruntime140_1.dll build\windows\x64\runner\Release
 
 The installer is written to `build\installer`. CI runs all these steps on
 every push.
+
+To build the Microsoft Store package from the same app folder (without
+Dokany's installer), with the Windows SDK installed, using the identity
+from Partner Center (**Product identity**):
+
+```powershell
+pwsh installer\msix\build-msix.ps1 -Source build\windows\x64\runner\Release `
+    -Name <Package/Identity/Name> -Publisher <Package/Identity/Publisher> `
+    -PublisherDisplayName <Package/Properties/PublisherDisplayName> `
+    -Version 1.2.0 -Destination build\msix
+```
+
+CI builds it for upload, as the **cloak-store** artifact, once the
+repository variables `STORE_IDENTITY_NAME`, `STORE_PUBLISHER` and
+`STORE_PUBLISHER_DISPLAY_NAME` hold these three values.
 
 You can develop the engine and the UI on Linux or macOS too: `flutter test`
 and `cargo test` work there, and the Windows-only parts (registry, file
