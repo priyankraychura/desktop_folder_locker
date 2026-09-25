@@ -265,12 +265,18 @@ class SettingsPage extends ConsumerWidget {
               icon: Icons.ads_click_rounded,
               tone: Tone.primary,
               title: 'Explorer integration',
-              subtitle: ExplorerIntegration.isSupported
-                  ? 'Vaults show a lock icon and open the password dialog on '
+              subtitle: !ExplorerIntegration.isSupported
+                  ? 'Only available on Windows.'
+                  : ref.watch(storeAppProvider)
+                  // The package's entries: the file type stays, and
+                  // Windows 11 shows the menu on its first level.
+                  ? 'The right-click menu locks, unlocks and opens items '
+                        'with ${AppInfo.name}. Vaults always open the '
+                        'password dialog on double-click.'
+                  : 'Vaults show a lock icon and open the password dialog on '
                         'double-click. The right-click menu locks, unlocks '
                         'and opens items with ${AppInfo.name} (under “Show '
-                        'more options” on Windows 11).'
-                  : 'Only available on Windows.',
+                        'more options” on Windows 11).',
               trailing: Switch(
                 value:
                     ExplorerIntegration.isSupported &&

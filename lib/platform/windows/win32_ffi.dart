@@ -55,6 +55,13 @@ abstract final class Win32 {
         void Function(int, int, Pointer<Void>, Pointer<Void>)
       >('SHChangeNotify');
 
+  static final int Function(Pointer<Uint32>, Pointer<Utf16>)
+  _getCurrentPackageFullName = _kernel32
+      .lookupFunction<
+        Int32 Function(Pointer<Uint32>, Pointer<Utf16>),
+        int Function(Pointer<Uint32>, Pointer<Utf16>)
+      >('GetCurrentPackageFullName');
+
   static final int Function(int) _allowSetForegroundWindow = _user32
       .lookupFunction<Int32 Function(Uint32), int Function(int)>(
         'AllowSetForegroundWindow',
@@ -117,6 +124,18 @@ abstract final class Win32 {
       _shChangeNotify(event, flags, first, second);
     });
   }
+
+  /// The full name of the package the app runs from (like
+  /// `Name_1.2.0.0_x64__publisherid`), or `null` without one.
+  static String? currentPackageFullName() => using((arena) {
+    // PACKAGE_FULL_NAME_MAX_LENGTH, and the NUL.
+    const capacity = 128;
+    final length = arena<Uint32>()..value = capacity;
+    final name = arena<Uint16>(capacity).cast<Utf16>();
+    // ERROR_SUCCESS; otherwise APPMODEL_ERROR_NO_PACKAGE.
+    if (_getCurrentPackageFullName(length, name) != 0) return null;
+    return name.toDartString();
+  });
 
   /// `ASFW_ANY`: lets any process bring its window to the foreground.
   static const int asfwAny = 0xFFFFFFFF;

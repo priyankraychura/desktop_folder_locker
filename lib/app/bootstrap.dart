@@ -12,6 +12,7 @@ import '../engine/crypto/crypto_service.dart';
 import '../features/settings/application/settings_controller.dart';
 import '../features/settings/data/settings_repository.dart';
 import '../features/shell/application/launch_intents.dart';
+import '../platform/app_package.dart';
 import '../platform/explorer_folders.dart';
 import '../platform/explorer_integration.dart';
 import '../platform/single_instance.dart';
@@ -60,6 +61,7 @@ Future<void> bootstrap(List<String> args) async {
       appPathsProvider.overrideWithValue(paths),
       cryptoProvider.overrideWithValue(crypto),
       executablePathProvider.overrideWithValue(Platform.resolvedExecutable),
+      storeAppProvider.overrideWithValue(AppPackage.isStoreApp),
       nativeWindowProvider.overrideWithValue(isDesktop),
       initialSettingsProvider.overrideWithValue(settings),
       if (Platform.isWindows) ...[

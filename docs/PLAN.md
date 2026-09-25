@@ -274,6 +274,14 @@ opened.
 - GitHub Releases with the Inno Setup installer (free). CI already builds
   it on every push.
 - Microsoft Store (free for individual developers; Microsoft signs MSIX).
+  ✅ The package (`installer/msix`): the whole app, built, installed and
+  checked in CI. It declares the `.flk` file type and the right-click
+  entry (first level on Windows 11) itself, and writes the app's data to
+  the real `%APPDATA%`, which the plug-in and the helper read and which
+  uninstalling must keep. No lock badge (packages can't declare icon
+  overlays) and no Dokany (packages can't install drivers). The app tells
+  it runs from it and leaves the registry alone; Explorer integration off
+  hides the entry through the plug-in. ⏳ Listing in Partner Center.
 - SignPath Foundation code signing (free for open-source projects).
 - Sign the Windows 11 menu package (Phase 3e) too, and have the installer
   install it next to the app (`Add-AppxPackage -ExternalLocation`, for

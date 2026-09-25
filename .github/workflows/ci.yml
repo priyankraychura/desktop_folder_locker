@@ -178,6 +178,73 @@ jobs:
           [Runtime.InteropServices.Marshal]::ReleaseComObject($command) | Out-Null
           Remove-AppxPackage -Package $installed.PackageFullName
 
+      # The Microsoft Store version (installer/msix): the whole app in a
+      # package. The Store signs it; here it's signed with a throwaway
+      # certificate, installed, checked and removed again.
+      - name: Test the Store package
+        shell: powershell
+        run: |
+          $release = Resolve-Path 'build\windows\x64\runner\Release'
+          $publisher = 'CN=Cloak Store Test'
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject $publisher -CertStoreLocation Cert:\CurrentUser\My
+          $cer = Join-Path $env:RUNNER_TEMP 'store-test.cer'
+          $pfx = Join-Path $env:RUNNER_TEMP 'store-test.pfx'
+          $password = 'test'
+          Export-Certificate -Cert $cert -FilePath $cer | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople | Out-Null
+          Export-PfxCertificate -Cert $cert -FilePath $pfx -Password (ConvertTo-SecureString $password -AsPlainText -Force) | Out-Null
+
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          $package = & .\installer\msix\build-msix.ps1 -Source $release -Name 'Cloak.StoreTest' `
+            -Publisher $publisher -PublisherDisplayName 'Cloak Test' -Version $version `
+            -Destination (Join-Path $env:RUNNER_TEMP 'msix') -Certificate $pfx -Password $password
+          Add-AppxPackage -Path $package
+          $installed = Get-AppxPackage -Name Cloak.StoreTest
+          if (-not $installed) { throw 'The package was not installed' }
+          $installed | Format-List Name, Version, Publisher, InstallLocation
+
+          # The app and its native parts, without Dokany's installer.
+          foreach ($file in 'cloak.exe', 'cloak_drive.exe', 'cloak_shell.dll', 'flutter_windows.dll', 'data\app.so') {
+            if (-not (Test-Path (Join-Path $installed.InstallLocation $file))) { throw "$file is not in the package" }
+          }
+          if (Test-Path (Join-Path $installed.InstallLocation 'dokany')) { throw "Dokany's installer is in the package" }
+          # The right-click command, made by the plug-in in Windows' host
+          # process, as for Explorer.
+          $command = [Activator]::CreateInstance([Type]::GetTypeFromCLSID('70A5D511-629B-4DF6-81E3-48CBA421BF7E'))
+          if ($null -eq $command) { throw 'Windows did not make the command' }
+          [Runtime.InteropServices.Marshal]::ReleaseComObject($command) | Out-Null
+          # .flk vaults open with the packaged app.
+          $progIds = Get-Item 'HKCU:\Software\Classes\.flk\OpenWithProgids' -ErrorAction SilentlyContinue
+          if (-not ($progIds.Property | Where-Object { $_ -like 'AppX*' })) { throw 'The .flk file type is not registered' }
+
+          Remove-AppxPackage -Package $installed.PackageFullName
+          if (Get-AppxPackage -Name Cloak.StoreTest) { throw 'The package was not removed' }
+
+      # For Partner Center: the Store package with the app's identity there
+      # (Product identity), from the repository's variables. The Store signs
+      # it. Built once they are set.
+      - name: Build the Store package for upload
+        if: ${{ vars.STORE_IDENTITY_NAME != '' }}
+        shell: pwsh
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+          STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          & .\installer\msix\build-msix.ps1 -Source build\windows\x64\runner\Release `
+            -Name $env:STORE_IDENTITY_NAME -Publisher $env:STORE_PUBLISHER `
+            -PublisherDisplayName $env:STORE_PUBLISHER_DISPLAY_NAME -Version $version `
+            -Destination build\msix
+
+      - name: Upload the Store package
+        if: ${{ vars.STORE_IDENTITY_NAME != '' }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: cloak-store
+          path: build/msix/*.msix
+          if-no-files-found: error
+
       - name: Build installer
         shell: pwsh
         run: |

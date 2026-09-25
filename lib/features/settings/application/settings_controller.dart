@@ -61,10 +61,13 @@ class SettingsController extends Notifier<AppSettings> {
   /// Adds or removes the Explorer context menu and vault association.
   ///
   /// The setting is saved first: the Explorer plug-in reads it (for the
-  /// lock badges) when Explorer refreshes, which the registry change
-  /// starts. If that change fails, the next start of the app tries again.
+  /// lock badges and the right-click entry) when Explorer refreshes, which
+  /// the registry change starts. If that change fails, the next start of
+  /// the app tries again. The Store version's entries belong to its
+  /// package: only the setting changes.
   Future<void> setExplorerIntegration(bool enabled) async {
     await _update(state.copyWith(explorerIntegration: enabled));
+    if (ref.read(storeAppProvider)) return;
     final integration = ref.read(explorerIntegrationProvider);
     if (enabled) {
       integration.register();
@@ -76,9 +79,11 @@ class SettingsController extends Notifier<AppSettings> {
   /// Makes the registry match the setting at startup: registers again if
   /// the entries point to an old location (the app was moved or updated),
   /// and removes the entries the installer adds if the user turned the
-  /// integration off.
+  /// integration off. Not in the Store version (see above).
   void syncExplorerIntegration() {
-    if (!ExplorerIntegration.isSupported) return;
+    if (!ExplorerIntegration.isSupported || ref.read(storeAppProvider)) {
+      return;
+    }
     final integration = ref.read(explorerIntegrationProvider);
     final registered = integration.isRegistered;
     if (state.explorerIntegration && !registered) {

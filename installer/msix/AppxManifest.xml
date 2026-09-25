@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Microsoft Store version: the whole app in an MSIX package, which the
+  Store signs. build-msix.ps1 fills in the identity from Partner Center
+  (name, publisher and its display name) and the version.
+
+  Next to the Setup version, it declares here what Setup writes to the
+  registry: the .flk file type and the Explorer plug-in's right-click
+  entry (on the first level of Windows 11's menu). It has no lock badge
+  (a package can't declare icon overlays) and no Dokany (a package can't
+  install drivers: Settings links to Dokany's download instead). The app
+  knows it runs from here (lib/platform/app_package.dart) and leaves the
+  registry alone.
+
+  The app's data in %APPDATA% is written to the real folder, not into the
+  package: the Explorer plug-in and the drive helper read it too, and
+  uninstalling must never delete the key store, which opens the vaults.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 desktop4 desktop5 desktop6 com rescap">
+  <Identity
+    Name="$NAME$"
+    Publisher="$PUBLISHER$"
+    Version="$VERSION$"
+    ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>Cloak</DisplayName>
+    <PublisherDisplayName>$PUBLISHER_DISPLAY_NAME$</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+  </Properties>
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <!-- For the unvirtualized %APPDATA% (see above). -->
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+  <Applications>
+    <Application
+      Id="Cloak"
+      Executable="cloak.exe"
+      EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Cloak"
+        Description="Encrypt and hide your folders on Windows"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- .flk vaults: the vault icon, and double-click opens the
+             password dialog (VaultProgId in installer/cloak.iss). -->
+        <uap3:Extension Category="windows.fileTypeAssociation">
+          <uap3:FileTypeAssociation Name="flk" Parameters="--open &quot;%1&quot;">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.flk</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>Locked item</uap:DisplayName>
+            <uap:Logo>Assets\VaultLogo.png</uap:Logo>
+          </uap3:FileTypeAssociation>
+        </uap3:Extension>
+        <!-- As in installer/sparse/AppxManifest.xml. CLSID_MENU_PACKAGED
+             in native/shell/src/com.rs. -->
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="Directory">
+              <desktop5:Verb Id="Cloak" Clsid="70A5D511-629B-4DF6-81E3-48CBA421BF7E" />
+            </desktop5:ItemType>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="Cloak" Clsid="70A5D511-629B-4DF6-81E3-48CBA421BF7E" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+        <!-- Windows runs the plug-in for this menu in its own host process
+             (dllhost), not in Explorer. -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="Cloak Explorer plug-in">
+              <com:Class Id="70A5D511-629B-4DF6-81E3-48CBA421BF7E" Path="cloak_shell.dll" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>
