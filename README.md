@@ -70,6 +70,10 @@ shown are temporary test folders.</sub>
   everything in one click.
 - **Reminders and automatic re-locking** for items you leave unlocked. You
   can also lock them automatically whenever the app locks.
+- **Lock again when you close it**: close an unlocked folder's Explorer
+  window and a small dialog asks to lock it again, also when you unlocked
+  it from Explorer without opening the app. Locking it again needs no
+  password, even after the app locked or Windows restarted.
 - **New recovery key** at any time. Every vault switches to it safely.
 - **Crash-safe**:
   - every new vault is decrypted and checked *before* the original is
@@ -193,7 +197,7 @@ then:
 copy C:\Windows\System32\msvcp140.dll     build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140.dll   build\windows\x64\runner\Release
 copy C:\Windows\System32\vcruntime140_1.dll build\windows\x64\runner\Release
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.2.0 installer\cloak.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.0 installer\cloak.iss
 ```
 
 The installer is written to `build\installer`. CI runs all these steps on
@@ -207,7 +211,7 @@ from Partner Center (**Product identity**):
 pwsh installer\msix\build-msix.ps1 -Source build\windows\x64\runner\Release `
     -Name <Package/Identity/Name> -Publisher <Package/Identity/Publisher> `
     -PublisherDisplayName <Package/Properties/PublisherDisplayName> `
-    -Version 1.2.0 -Destination build\msix
+    -Version 1.3.0 -Destination build\msix
 ```
 
 CI builds it for upload, as the **cloak-store** artifact, once the

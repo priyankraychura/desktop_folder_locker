@@ -8,6 +8,7 @@ import 'package:desktop_folder_locker/features/items/application/item_key_cache.
 import 'package:desktop_folder_locker/features/items/application/items_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/path_guard.dart';
 import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
+import 'package:desktop_folder_locker/features/items/application/relock_keys.dart';
 import 'package:desktop_folder_locker/features/items/domain/protected_item.dart';
 import 'package:desktop_folder_locker/platform/access_control.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -166,6 +167,89 @@ void main() {
     expect(await session().unlock('new-master'), isTrue);
     final outcome = await protection().unlock(items().byId(item.id)!);
     expect(outcome.item.isProtected, isFalse);
+  });
+
+  group('an unlocked item', () {
+    Future<ProtectedItem> unlocked({
+      PasswordMode mode = PasswordMode.master,
+    }) async {
+      final item = await protection().protectNew(
+        ProtectRequest(
+          path: folder('Secret').path,
+          method: ProtectionMethod.encrypt,
+          hide: false,
+          passwordMode: mode,
+          customPassword: mode == PasswordMode.custom ? 'item-password' : null,
+        ),
+      );
+      return (await protection().unlock(item)).item;
+    }
+
+    RelockKeys relockKeys() => harness.container.read(relockKeysProvider);
+
+    test('locks again without a password after the app locked', () async {
+      final item = await unlocked();
+      expect(relockKeys().has(item.id), isTrue);
+
+      session().lock();
+      expect(protection().lockRequirement(item), LockRequirement.none);
+      final locked = await protection().lockAgain(item);
+      expect(locked.isProtected, isTrue);
+      expect(locked.needsPassword, isFalse);
+      expect(relockKeys().has(item.id), isFalse, reason: 'used once');
+
+      final outcome = await protection().unlock(
+        locked,
+        credential: const PasswordCredential('master-password'),
+      );
+      expect(outcome.item.isProtected, isFalse);
+    });
+
+    test('with its own password, too', () async {
+      final item = await unlocked(mode: PasswordMode.custom);
+      session().lock();
+      expect(protection().lockRequirement(item), LockRequirement.none);
+      final locked = await protection().lockAgain(item);
+      await expectLater(
+        protection().unlock(
+          locked,
+          credential: const PasswordCredential('master-password'),
+        ),
+        throwsA(isA<EngineException>()),
+      );
+      final outcome = await protection().unlock(
+        locked,
+        credential: const PasswordCredential('item-password'),
+      );
+      expect(outcome.item.isProtected, isFalse);
+    });
+
+    test('follows a new master password', () async {
+      final item = await unlocked();
+      expect(await session().changePassword(newPassword: 'new-master'), 0);
+
+      session().lock();
+      final locked = await protection().lockAgain(item);
+      expect(locked.needsPassword, isFalse);
+      await expectLater(
+        protection().unlock(
+          locked,
+          credential: const PasswordCredential('master-password'),
+        ),
+        throwsA(isA<EngineException>()),
+      );
+      final outcome = await protection().unlock(
+        locked,
+        credential: const PasswordCredential('new-master'),
+      );
+      expect(outcome.item.isProtected, isFalse);
+    });
+
+    test('removing it drops its keys', () async {
+      final item = await unlocked();
+      await protection().remove(item);
+      expect(relockKeys().has(item.id), isFalse);
+    });
   });
 
   test('the recovery key resets the master password', () async {

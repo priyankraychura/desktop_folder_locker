@@ -48,7 +48,7 @@ void main() {
           vaultPath: '$itemPath.flk',
           journalDir: env.journalDir,
         ),
-        slots,
+        slots: slots,
       );
 
   UnlockResult unlock(
@@ -293,6 +293,106 @@ void main() {
       unorderedEquals(['Secret', '_journal']),
     );
     expect(Journal(env.journalDir).pending(), isEmpty);
+  });
+
+  group('keys made ahead', () {
+    LockResult lockPrepared(
+      String itemPath,
+      PreparedVault prepared, {
+      CancellationToken? cancel,
+      void Function(OperationProgress)? onProgress,
+    }) =>
+        LockOperation(
+          crypto: env.crypto,
+          progress: onProgress == null
+              ? ProgressReporter.silent()
+              : ProgressReporter(onProgress, interval: Duration.zero),
+          cancel: cancel ?? CancellationToken(),
+        ).run(
+          LockRequest(
+            operationId: newId(),
+            itemPath: itemPath,
+            vaultPath: '$itemPath.flk',
+            journalDir: env.journalDir,
+          ),
+          prepared: prepared,
+        );
+
+    test('lock a folder that then opens with its passwords', () {
+      final folder = env.createSampleFolder('Secret');
+      final before = snapshotTree(folder.path);
+      final recovery = RecoveryKey.generate(env.crypto);
+      final prepared = VaultKeys(env.crypto).prepare(
+        VaultSlotsSpec(
+          master: env.derive('master'),
+          recoveryPublicKey: recovery.keyPair(env.crypto).publicKey,
+        ),
+      );
+      addTearDown(prepared.dispose);
+
+      final result = lockPrepared(folder.path, prepared);
+      expect(folder.existsSync(), isFalse);
+      final header = VaultHeader.read(result.vaultPath, env.crypto);
+      expect(header.vaultId, prepared.header.vaultId);
+
+      final unlocked = unlock(
+        result.vaultPath,
+        const PasswordCredential('master'),
+      );
+      unlocked.derivedKey?.dispose();
+      expectSameTree(before, snapshotTree(folder.path));
+
+      final again = lockPrepared(
+        folder.path,
+        VaultKeys(env.crypto).prepare(
+          VaultSlotsSpec(
+            recoveryPublicKey: recovery.keyPair(env.crypto).publicKey,
+            custom: env.derive('custom'),
+          ),
+        ),
+      );
+      unlock(again.vaultPath, RecoveryCredential(recovery));
+      expectSameTree(before, snapshotTree(folder.path));
+    });
+
+    test('a lock that failed after writing says the keys are used', () {
+      final folder = env.createSampleFolder('Secret');
+      final before = snapshotTree(folder.path);
+      final prepared = VaultKeys(env.crypto)
+          .prepare(VaultSlotsSpec(master: env.derive('pw')));
+      addTearDown(prepared.dispose);
+      final cancel = CancellationToken();
+
+      expect(
+        () => lockPrepared(
+          folder.path,
+          prepared,
+          cancel: cancel,
+          onProgress: (progress) {
+            if (progress.processedBytes > 0) cancel.cancel();
+          },
+        ),
+        throwsA(
+          isA<EngineException>()
+              .having((e) => e.code, 'code', EngineErrorCode.cancelled)
+              .having((e) => e.keysUsed, 'keysUsed', isTrue),
+        ),
+      );
+      expectSameTree(before, snapshotTree(folder.path));
+    });
+
+    test('a lock that failed before writing keeps the keys usable', () {
+      final prepared = VaultKeys(env.crypto)
+          .prepare(VaultSlotsSpec(master: env.derive('pw')));
+      addTearDown(prepared.dispose);
+
+      expect(
+        () => lockPrepared(env.path('Missing'), prepared),
+        throwsA(
+          isA<EngineException>().having((e) => e.keysUsed, 'keysUsed', false),
+        ),
+      );
+    });
   });
 
   test('cancelling an unlock keeps the vault', () {

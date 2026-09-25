@@ -44,7 +44,17 @@ enum EngineErrorCode {
 ///
 /// Instances are sent between isolates, so they only hold plain data.
 class EngineException implements Exception {
-  const EngineException(this.code, this.message, {this.path});
+  const EngineException(
+    this.code,
+    this.message, {
+    this.path,
+    this.keysUsed = false,
+  });
+
+  /// [error] as it is, or any other error as an [EngineErrorCode.ioError].
+  factory EngineException.from(Object error) => error is EngineException
+      ? error
+      : EngineException(EngineErrorCode.ioError, error.toString());
 
   final EngineErrorCode code;
 
@@ -53,6 +63,13 @@ class EngineException implements Exception {
 
   /// The file or folder the error is about, when known.
   final String? path;
+
+  /// A lock with keys made ahead (see `PreparedVault`) failed after it
+  /// wrote with them: they must not be used again.
+  final bool keysUsed;
+
+  EngineException withKeysUsed() =>
+      EngineException(code, message, path: path, keysUsed: true);
 
   @override
   String toString() =>

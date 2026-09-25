@@ -77,7 +77,14 @@ class LockOperation {
   final ProgressReporter _progress;
   final CancellationToken _cancel;
 
-  LockResult run(LockRequest request, VaultSlotsSpec slots) {
+  /// Locks with new keys for [slots], or with the keys made ahead in
+  /// [prepared]. Once those were used to write, a failure says so (see
+  /// [EngineException.keysUsed]): they must not be used again.
+  LockResult run(
+    LockRequest request, {
+    VaultSlotsSpec? slots,
+    PreparedVault? prepared,
+  }) {
     final itemPath = p.normalize(request.itemPath);
     final vaultPath = p.normalize(request.vaultPath);
     if (FsUtils.exists(vaultPath)) {
@@ -133,12 +140,14 @@ class LockOperation {
         sourceRoot: staged,
         outputPath: partial,
         slots: slots,
+        prepared: prepared,
         progress: _progress,
         cancel: _cancel,
       );
-    } on Object {
+    } on Object catch (error) {
       _rollback(journal, entry);
-      rethrow;
+      if (prepared == null) rethrow;
+      throw EngineException.from(error).withKeysUsed();
     }
 
     try {
@@ -165,9 +174,10 @@ class LockOperation {
         force: true,
       );
       FsUtils.rename(partial, vaultPath);
-    } on Object {
+    } on Object catch (error) {
       _rollback(journal, entry);
-      rethrow;
+      if (prepared == null) rethrow;
+      throw EngineException.from(error).withKeysUsed();
     } finally {
       written.dispose();
     }

@@ -6,6 +6,7 @@ import '../../../engine/engine_runner.dart';
 import '../../../engine/vault/vault_keys.dart';
 import '../../items/application/items_controller.dart';
 import '../../items/application/protection_controller.dart';
+import '../../items/application/relock_keys.dart';
 import '../../items/domain/protected_item.dart';
 import 'auth_service.dart';
 import 'session_controller.dart';
@@ -63,6 +64,10 @@ class RecoveryKeyService {
     if (_updating || keystore == null || !session.isUnlocked) return const [];
     _updating = true;
     try {
+      // Unlocked items lock again for the current recovery key.
+      _ref
+          .read(relockKeysProvider)
+          .update(recoveryPublicKey: keystore.recoveryPublicKey);
       final protection = _ref.read(protectionControllerProvider.notifier);
       final vaults = [
         for (final item in _ref.read(itemsControllerProvider.notifier).items)

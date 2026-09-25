@@ -50,31 +50,33 @@ class VaultWriter {
 
   static const int _readBufferSize = 1024 * 1024;
 
+  /// Writes a vault with new keys for [slots], or with the keys made
+  /// ahead in [prepared] (which the caller keeps, and must not use again).
   WrittenVault write({
     required SourceSnapshot source,
     required String sourceRoot,
     required String outputPath,
-    required VaultSlotsSpec slots,
     required ProgressReporter progress,
     required CancellationToken cancel,
+    VaultSlotsSpec? slots,
+    PreparedVault? prepared,
     int chunkSize = VaultHeader.defaultChunkSize,
   }) {
-    final vaultId = _crypto.randomBytes(VaultHeader.vaultIdLength);
-    final dataKey = _crypto.randomKey();
-    final prefix = VaultHeader.buildPrefix(
-      vaultId: vaultId,
-      chunkSize: chunkSize,
+    assert(
+      (slots == null) != (prepared == null),
+      'Either slots or prepared keys',
     );
-    final header = VaultHeader(
-      vaultId: vaultId,
-      chunkSize: chunkSize,
-      slots: VaultKeys(_crypto).buildSlots(
-        prefix: prefix,
-        vaultId: vaultId,
-        dataKey: dataKey,
-        spec: slots,
-      ),
-    );
+    final made = prepared == null
+        ? VaultKeys(_crypto).prepare(slots!, chunkSize: chunkSize)
+        : PreparedVault(
+            header: prepared.header,
+            dataKey: prepared.dataKey.copy(),
+          );
+    final header = made.header;
+    final vaultId = header.vaultId;
+    final dataKey = made.dataKey;
+    final prefix = header.prefix;
+    chunkSize = header.chunkSize;
 
     final payloadKey = payloadKeyFor(_crypto, dataKey, vaultId);
     final RandomAccessFile out;

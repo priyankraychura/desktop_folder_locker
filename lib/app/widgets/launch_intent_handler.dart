@@ -66,8 +66,10 @@ class _LaunchIntentHandlerState extends ConsumerState<LaunchIntentHandler> {
     }
   }
 
-  void _schedule() =>
-      WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_pump()));
+  /// Soon, outside of the change that asked. Not after the next frame: a
+  /// hidden window (the app in the background) draws none, so a folder
+  /// closed meanwhile would wait until the app shows.
+  void _schedule() => Timer.run(() => unawaited(_pump()));
 
   Future<void> _pump() async {
     if (_handling || !mounted) return;

@@ -8,6 +8,7 @@ import '../../../engine/format/key_slot.dart';
 import '../../../engine/vault/vault_keys.dart';
 import '../../items/application/item_key_cache.dart';
 import '../../items/application/items_controller.dart';
+import '../../items/application/relock_keys.dart';
 import '../domain/keystore.dart';
 import 'auth_service.dart';
 
@@ -201,6 +202,8 @@ class SessionController extends Notifier<SessionState> {
       hint: hint,
     );
     _setUnlocked(change.keystore, change.masterKey);
+    // Unlocked items lock again for the new password.
+    ref.read(relockKeysProvider).update(master: change.masterKey);
 
     final failed = {
       for (final outcome in change.failedVaults) outcome.vaultPath,

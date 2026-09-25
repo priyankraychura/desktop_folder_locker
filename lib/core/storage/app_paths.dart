@@ -35,8 +35,12 @@ class AppPaths {
   String get inboxDir => p.join(root, 'inbox');
   String get instanceLockFile => p.join(root, 'instance.lock');
 
+  /// Keys to lock unlocked items again without a password (see
+  /// `RelockKeys`).
+  String get relockDir => p.join(root, 'relock');
+
   void ensureExists() {
-    for (final dir in [root, journalDir, inboxDir]) {
+    for (final dir in [root, journalDir, inboxDir, relockDir]) {
       Directory(dir).createSync(recursive: true);
     }
   }

@@ -5,6 +5,7 @@ import 'package:desktop_folder_locker/features/auth/application/session_controll
 import 'package:desktop_folder_locker/features/items/application/item_key_cache.dart';
 import 'package:desktop_folder_locker/features/items/application/items_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
+import 'package:desktop_folder_locker/features/items/application/relock_keys.dart';
 import 'package:desktop_folder_locker/features/items/application/unlocked_items_watcher.dart';
 import 'package:desktop_folder_locker/features/items/domain/protected_item.dart';
 import 'package:desktop_folder_locker/features/settings/domain/app_settings.dart';
@@ -141,9 +142,10 @@ void main() {
       method: ProtectionMethod.encrypt,
       mode: PasswordMode.custom,
     );
-    // Its own password is no longer remembered, so it can't be locked
-    // without asking.
+    // Its own password is no longer remembered, and it has no keys made
+    // as it was unlocked, so it can't be locked without asking.
     harness.container.read(itemKeyCacheProvider).remove(shared.id);
+    harness.container.read(relockKeysProvider).remove(shared.id);
 
     final left = await harness.container.read(appLockerProvider).lockApp();
 
