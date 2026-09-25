@@ -6,7 +6,7 @@
 ;   cargo build --release -p cloak-drive -p cloak-shell   (in native\)
 ;   flutter build windows --release                  (copies both next to the app)
 ;   pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
-;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.2 installer\cloak.iss
+;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.3 installer\cloak.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml). Without the Dokany step, the installer links to
@@ -54,7 +54,7 @@
 #endif
 
 #ifndef AppVersion
-  #define AppVersion "1.3.2"
+  #define AppVersion "1.3.3"
 #endif
 
 [Setup]
@@ -92,7 +92,7 @@ SolidCompression=yes
 ; Close a running copy before replacing its files. Not Explorer, which
 ; loads the plug-in: see MovePluginAway in [Code]. Force: a copy that
 ; doesn't quit when asked (1.3.0 and older hide in the notification area
-; instead) is ended, rather than failing with "DeleteFile failed; code 5".
+; instead) is ended. What still can't be closed: see MoveLockedFiles.
 CloseApplications=force
 CloseApplicationsFilter=*.exe,*.chm
 RestartApplications=no
@@ -162,9 +162,9 @@ Root: HKCU; Subkey: "Software\Classes\*\shell\{#LockVerb}\command"; ValueType: s
 #endif
 
 [InstallDelete]
-; Copies of the plug-in that were in use last time (see MovePluginAway).
-Type: files; Name: "{app}\{#ShellDll}.*.old"
-Type: files; Name: "{app}\{#OldShellDll}.*.old"
+; Copies of the plug-in and the app's files that were in use last time (see
+; MoveAway).
+Type: files; Name: "{app}\*.old"
 ; The app under its old name.
 Type: files; Name: "{app}\{#OldExeName}"
 Type: files; Name: "{app}\{#OldHelperName}"
@@ -172,8 +172,7 @@ Type: files; Name: "{autoprograms}\{#OldAppName}.lnk"
 Type: files; Name: "{autodesktop}\{#OldAppName}.lnk"
 
 [UninstallDelete]
-Type: files; Name: "{app}\{#ShellDll}.*.old"
-Type: files; Name: "{app}\{#OldShellDll}.*.old"
+Type: files; Name: "{app}\*.old"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
@@ -267,29 +266,61 @@ end;
   next update (see the InstallDelete section). Where Setup may, Windows
   deletes it when it restarts. So neither updating nor uninstalling needs a
   restart. }
-procedure MoveAway(Dll: String);
+procedure MoveAway(Path: String);
 var
-  Stamp, Old: String;
+  Stamp, Name, Old: String;
   Moved: Boolean;
 begin
-  if not FileExists(Dll) or DeleteFile(Dll) then
+  if not FileExists(Path) or DeleteFile(Path) then
     Exit;
   Stamp := GetDateTimeString('yyyymmddhhnnsszzz', #0, #0);
-  Old := ExpandConstant('{%TEMP}\Cloak-plugin-') + Stamp + '.dll.old';
-  Moved := RenameFile(Dll, Old);
+  Name := ExtractFileName(Path);
+  Old := ExpandConstant('{%TEMP}\Cloak-') + Name + '.' + Stamp + '.old';
+  Moved := RenameFile(Path, Old);
   if not Moved then
   begin
-    Old := Dll + '.' + Stamp + '.old';
-    Moved := RenameFile(Dll, Old);
+    Old := ExpandConstant('{app}\') + Name + '.' + Stamp + '.old';
+    Moved := RenameFile(Path, Old);
   end;
   if Moved then
   begin
-    Log('The Explorer plug-in was in use. Moved it to ' + Old);
+    Log(Path + ' was in use. Moved it to ' + Old);
     if IsAdmin then
       RestartReplace(Old, '');
   end
   else
-    Log('The Explorer plug-in is in use and could not be moved.');
+    Log(Path + ' is in use and could not be moved.');
+end;
+
+{ The same for the app's own files. A copy of the app that Setup can't
+  close keeps them loaded: one that doesn't quit when asked, or the copy
+  Windows makes of a crashed app for its crash report, which may stay until
+  Windows restarts (1.3.2 and older crashed when they quit). Setup would
+  fail with "DeleteFile failed; code 5". }
+procedure MoveLockedFiles(Dir: String);
+var
+  Found: TFindRec;
+  Ext: String;
+begin
+  if not FindFirst(Dir + '\*', Found) then
+    Exit;
+  try
+    repeat
+      if (Found.Name <> '.') and (Found.Name <> '..') then
+      begin
+        if Found.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0 then
+          MoveLockedFiles(Dir + '\' + Found.Name)
+        else
+        begin
+          Ext := Lowercase(ExtractFileExt(Found.Name));
+          if (Ext = '.exe') or (Ext = '.dll') or (Ext = '.so') then
+            MoveAway(Dir + '\' + Found.Name);
+        end;
+      end;
+    until not FindNext(Found);
+  finally
+    FindClose(Found);
+  end;
 end;
 
 { The plug-in, and its copy from when the app had its old name. }
@@ -305,6 +336,7 @@ begin
   begin
     RemoveExplorerEntry;
     MovePluginAway;
+    MoveLockedFiles(ExpandConstant('{app}'));
   end;
 #ifdef BundleDokany
   if (CurStep = ssPostInstall) and WizardIsTaskSelected('dokany') then

@@ -38,6 +38,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  // window_manager's destroy(), which the app quits with, only ends the
+  // loop above: the window is still there. Close it as the close button
+  // would, while everything is alive. Otherwise the engine goes first (with
+  // FlutterWindow's members) and Windows then sends the destroyed view
+  // messages: a crash in flutter_windows.dll on every quit, and a crash
+  // report copy of the process that keeps cloak.exe locked until a restart,
+  // so updates fail with "DeleteFile failed; code 5".
+  if (HWND handle = window.GetHandle()) {
+    ::DestroyWindow(handle);
+  }
+
   ::CoUninitialize();
   return EXIT_SUCCESS;
 }
