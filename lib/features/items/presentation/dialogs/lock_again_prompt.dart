@@ -97,37 +97,33 @@ class _LockAgainPromptState extends ConsumerState<_LockAgainPrompt> {
       child: AppDialog(
         icon: Icons.lock_rounded,
         title: 'Lock “${item.name}” again?',
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.closed)
-              Text(
-                item.isMounted
-                    ? 'You closed its drive (${item.driveName}) in Explorer.'
-                    : 'You closed it in Explorer.',
-                style: context.text.bodyMedium,
-              ),
-            if (widget.closed && widget.askMasterPassword)
-              const SizedBox(height: AppSpacing.lg),
-            if (widget.askMasterPassword) ...[
-              PasswordField(
-                controller: _password,
-                label: 'Master password',
-                autofocus: true,
-                enabled: !_busy,
-                errorText: _fieldError,
-                onSubmitted: (_) => _lock(),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                '${AppInfo.name} locked itself since you opened it, so '
-                'locking it needs your master password.',
-                style: context.text.bodySmall,
-              ),
-            ],
-          ],
-        ),
+        subtitle: widget.closed
+            ? item.isMounted
+                  ? 'You closed its drive (${item.driveName}) in Explorer.'
+                  : 'You closed it in Explorer.'
+            : null,
+        content: widget.askMasterPassword
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  PasswordField(
+                    controller: _password,
+                    label: 'Master password',
+                    autofocus: true,
+                    enabled: !_busy,
+                    errorText: _fieldError,
+                    onSubmitted: (_) => _lock(),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    '${AppInfo.name} locked itself since you opened it, so '
+                    'locking it needs your master password.',
+                    style: context.text.bodySmall,
+                  ),
+                ],
+              )
+            : null,
         actions: [
           TextButton(
             onPressed: _busy ? null : () => Navigator.of(context).pop(false),

@@ -31,6 +31,13 @@ class FlutterWindow : public Win32Window {
   // Colors Windows' title bar as |title_bar_| says, if it says.
   void ApplyTitleBar();
 
+  // Gives the window's content |height| logical pixels, keeping it
+  // centered where it is, inside the work area of its screen. With
+  // |glide|, a visible window glides there (|fit_|, a step each timer
+  // tick), so what it shows stays still instead of jumping.
+  void FitHeight(double height, bool glide);
+  void StepFit();
+
   // The project to run.
   flutter::DartProject project_;
 
@@ -49,8 +56,9 @@ class FlutterWindow : public Win32Window {
   //       work area of its screen
   //   toFront  brings the window to the front even though another app has
   //       the focus, as a question the user expects right now should
-  //   fitHeight height  gives the window's content that height (logical
-  //       pixels), keeping it centered where it is, inside the work area
+  //   fitHeight [height, glide]  gives the window's content that height
+  //       (logical pixels), keeping it centered where it is, inside the
+  //       work area; gliding there if asked, while it shows
   //   titleBarColors [background, text, dark]  colors Windows' title bar
   //       (ARGB) like the page under it, with light or dark buttons
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
@@ -63,6 +71,17 @@ class FlutterWindow : public Win32Window {
     BOOL dark;
   };
   std::optional<TitleBarColors> title_bar_;
+
+  // The glide FitHeight started: outer top and height, in physical pixels,
+  // and when it started (0: at once).
+  struct Fit {
+    int from_top;
+    int from_height;
+    int to_top;
+    int to_height;
+    ULONGLONG start;
+  };
+  std::optional<Fit> fit_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

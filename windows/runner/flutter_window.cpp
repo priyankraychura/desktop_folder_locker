@@ -97,35 +97,9 @@ void ToFront(HWND window) {
 #define DWMWA_TEXT_COLOR 36
 #endif
 
-// Gives the content of |window| |height| logical pixels, keeping the
-// window centered where it is, inside the work area of its screen.
-void FitHeight(HWND window, double height) {
-  RECT bounds;
-  RECT client;
-  if (!::GetWindowRect(window, &bounds) || !::GetClientRect(window, &client)) {
-    return;
-  }
-  const double scale = ::GetDpiForWindow(window) / 96.0;
-  const int frame =
-      (bounds.bottom - bounds.top) - (client.bottom - client.top);
-  int outer = static_cast<int>(height * scale + 0.5) + frame;
-  const int width = bounds.right - bounds.left;
-  int y = (bounds.top + bounds.bottom - outer) / 2;
-  MONITORINFO info = {};
-  info.cbSize = sizeof(info);
-  if (::GetMonitorInfoW(::MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
-                        &info)) {
-    const RECT& work = info.rcWork;
-    outer = std::min(outer, static_cast<int>(work.bottom - work.top));
-    y = std::clamp(y, static_cast<int>(work.top),
-                   static_cast<int>(work.bottom) - outer);
-  }
-  if (outer == bounds.bottom - bounds.top && y == bounds.top) {
-    return;
-  }
-  ::SetWindowPos(window, nullptr, bounds.left, y, width, outer,
-                 SWP_NOZORDER | SWP_NOACTIVATE);
-}
+// The timer of FlutterWindow::FitHeight's glide, and how long it takes.
+constexpr UINT_PTR kFitTimer = 1;
+constexpr ULONGLONG kFitMilliseconds = 160;
 
 // ARGB, as Dart's Color, to a COLORREF.
 COLORREF ToColorRef(int64_t argb) {
@@ -212,15 +186,21 @@ bool FlutterWindow::OnCreate() {
           result->Success(
               flutter::EncodableValue(::GetForegroundWindow() == window));
         } else if (call.method_name() == "fitHeight") {
-          const auto* height =
+          const auto* list =
               call.arguments() != nullptr
-                  ? std::get_if<double>(call.arguments())
+                  ? std::get_if<flutter::EncodableList>(call.arguments())
                   : nullptr;
-          if (height == nullptr || *height <= 0) {
-            result->Error("bad-arguments", "Expected a height");
+          const auto* height = list != nullptr && list->size() == 2
+                                   ? std::get_if<double>(&(*list)[0])
+                                   : nullptr;
+          const auto* glide = list != nullptr && list->size() == 2
+                                  ? std::get_if<bool>(&(*list)[1])
+                                  : nullptr;
+          if (height == nullptr || *height <= 0 || glide == nullptr) {
+            result->Error("bad-arguments", "Expected [height, glide]");
             return;
           }
-          FitHeight(window, *height);
+          FitHeight(*height, *glide);
           result->Success();
         } else if (call.method_name() == "titleBarColors") {
           const auto* list =
@@ -257,6 +237,75 @@ bool FlutterWindow::OnCreate() {
   flutter_controller_->ForceRedraw();
 
   return true;
+}
+
+void FlutterWindow::FitHeight(double height, bool glide) {
+  const HWND window = GetHandle();
+  RECT bounds;
+  RECT client;
+  if (!::GetWindowRect(window, &bounds) || !::GetClientRect(window, &client)) {
+    return;
+  }
+  const double scale = ::GetDpiForWindow(window) / 96.0;
+  const int frame =
+      (bounds.bottom - bounds.top) - (client.bottom - client.top);
+  int outer = static_cast<int>(height * scale + 0.5) + frame;
+  int y = (bounds.top + bounds.bottom - outer) / 2;
+  MONITORINFO info = {};
+  info.cbSize = sizeof(info);
+  if (::GetMonitorInfoW(::MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+                        &info)) {
+    const RECT& work = info.rcWork;
+    outer = std::min(outer, static_cast<int>(work.bottom - work.top));
+    y = std::clamp(y, static_cast<int>(work.top),
+                   static_cast<int>(work.bottom) - outer);
+  }
+  if (outer == bounds.bottom - bounds.top && y == bounds.top) {
+    ::KillTimer(window, kFitTimer);
+    return;
+  }
+  fit_ = Fit{static_cast<int>(bounds.top),
+             static_cast<int>(bounds.bottom - bounds.top), y, outer,
+             glide && ::IsWindowVisible(window) ? ::GetTickCount64() : 0};
+  StepFit();
+  if (fit_) {
+    ::SetTimer(window, kFitTimer, USER_TIMER_MINIMUM, nullptr);
+  }
+}
+
+void FlutterWindow::StepFit() {
+  const HWND window = GetHandle();
+  if (!fit_) {
+    ::KillTimer(window, kFitTimer);
+    return;
+  }
+  const double t =
+      fit_->start == 0
+          ? 1.0
+          : std::min(1.0, static_cast<double>(::GetTickCount64() -
+                                              fit_->start) /
+                              kFitMilliseconds);
+  // Ease out: fast first, gently into place.
+  const double eased = 1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t);
+  const auto between = [eased](int from, int to) {
+    return from + static_cast<int>((to - from) * eased +
+                                   (to > from ? 0.5 : -0.5));
+  };
+  RECT bounds;
+  if (!::GetWindowRect(window, &bounds)) {
+    fit_.reset();
+    ::KillTimer(window, kFitTimer);
+    return;
+  }
+  ::SetWindowPos(window, nullptr, bounds.left,
+                 between(fit_->from_top, fit_->to_top),
+                 bounds.right - bounds.left,
+                 between(fit_->from_height, fit_->to_height),
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+  if (t >= 1.0) {
+    fit_.reset();
+    ::KillTimer(window, kFitTimer);
+  }
 }
 
 void FlutterWindow::ApplyTitleBar() {
@@ -296,6 +345,11 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   // the notification area, so quit instead: its files can then be replaced.
   // Unlocked items stay as they are, the drive helper stops once the app is
   // gone, and the journal finishes an interrupted operation next time.
+  if (message == WM_TIMER && wparam == kFitTimer) {
+    StepFit();
+    return 0;
+  }
+
   switch (message) {
     case WM_QUERYENDSESSION:
       return TRUE;
