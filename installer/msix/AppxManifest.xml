@@ -32,7 +32,7 @@
     Version="$VERSION$"
     ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>Cloak</DisplayName>
+    <DisplayName>Cloak - Lock &amp; Encrypt Folders</DisplayName>
     <PublisherDisplayName>$PUBLISHER_DISPLAY_NAME$</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
@@ -54,7 +54,7 @@
       Executable="cloak.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="Cloak"
+        DisplayName="Cloak - Lock &amp; Encrypt Folders"
         Description="Encrypt and hide your folders on Windows"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"

@@ -3,7 +3,7 @@
     python3 tool/generate_icons.py
 
 Writes:
-  windows/runner/resources/app_icon.ico    app / taskbar icon
+  windows/runner/resources/app_icon.ico    app / taskbar icon (the vault icon)
   windows/runner/resources/vault_icon.ico  icon of .flk vault files in Explorer
   windows/runner/resources/tray_attention.ico
                                            notification-area icon while items
@@ -87,15 +87,8 @@ def draw_padlock(draw, center_x, top, width, color, hole_color):
 
 
 def app_icon():
-    size = CANVAS
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (40, 40, size - 40, size - 40), radius=230, fill=255
-    )
-    icon = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    icon.paste(gradient(size, INDIGO, VIOLET), (0, 0), mask)
-    draw_padlock(ImageDraw.Draw(icon), size / 2, 250, 420, WHITE, DEEP + (255,))
-    return icon
+    """The app is its vault: a folder with a padlock badge."""
+    return vault_icon()
 
 
 def vault_icon():
@@ -125,10 +118,11 @@ def vault_icon():
 
 
 def tray_attention_icon():
-    """The app icon with an amber dot, drawn big enough to read at 16 px."""
+    """The app icon with an amber dot, drawn big enough to read at 16 px.
+    Top right: the padlock badge has the bottom right."""
     icon = app_icon()
     draw = ImageDraw.Draw(icon)
-    cx, cy, r = CANVAS - 230, CANVAS - 230, 200
+    cx, cy, r = CANVAS - 210, 250, 170
     draw.ellipse((cx - r - 40, cy - r - 40, cx + r + 40, cy + r + 40), fill=WHITE)
     draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=AMBER + (255,))
     return icon

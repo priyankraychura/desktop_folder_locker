@@ -7,6 +7,7 @@
 #include <flutter/method_channel.h>
 
 #include <memory>
+#include <optional>
 
 #include "explorer_watcher.h"
 #include "tray_icon.h"
@@ -27,6 +28,9 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  // Colors Windows' title bar as |title_bar_| says, if it says.
+  void ApplyTitleBar();
+
   // The project to run.
   flutter::DartProject project_;
 
@@ -45,8 +49,20 @@ class FlutterWindow : public Win32Window {
   //       work area of its screen
   //   toFront  brings the window to the front even though another app has
   //       the focus, as a question the user expects right now should
+  //   fitHeight height  gives the window's content that height (logical
+  //       pixels), keeping it centered where it is, inside the work area
+  //   titleBarColors [background, text, dark]  colors Windows' title bar
+  //       (ARGB) like the page under it, with light or dark buttons
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       window_channel_;
+
+  // Windows' title bar, as Dart last asked for it.
+  struct TitleBarColors {
+    COLORREF background;
+    COLORREF text;
+    BOOL dark;
+  };
+  std::optional<TitleBarColors> title_bar_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

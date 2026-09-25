@@ -218,6 +218,7 @@ class _UnlockDialogState extends ConsumerState<_UnlockDialog> {
               ],
             ),
           ],
+          const SizedBox(height: AppSpacing.md),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(

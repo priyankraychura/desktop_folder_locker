@@ -30,6 +30,16 @@ class FakeAppWindow implements AppWindow {
   }
 
   @override
+  Future<void> fitHeight(double height) async {}
+
+  @override
+  Future<void> colorTitleBar({
+    required Color background,
+    required Color text,
+    required bool dark,
+  }) async {}
+
+  @override
   Future<void> hide() async => visible = false;
 
   @override

@@ -1,5 +1,6 @@
 #include "flutter_window.h"
 
+#include <dwmapi.h>
 #include <flutter/standard_method_codec.h>
 
 #include <algorithm>
@@ -85,6 +86,63 @@ void ToFront(HWND window) {
   }
 }
 
+// Windows 11's title bar colors; Windows 10 ignores them.
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef DWMWA_CAPTION_COLOR
+#define DWMWA_CAPTION_COLOR 35
+#endif
+#ifndef DWMWA_TEXT_COLOR
+#define DWMWA_TEXT_COLOR 36
+#endif
+
+// Gives the content of |window| |height| logical pixels, keeping the
+// window centered where it is, inside the work area of its screen.
+void FitHeight(HWND window, double height) {
+  RECT bounds;
+  RECT client;
+  if (!::GetWindowRect(window, &bounds) || !::GetClientRect(window, &client)) {
+    return;
+  }
+  const double scale = ::GetDpiForWindow(window) / 96.0;
+  const int frame =
+      (bounds.bottom - bounds.top) - (client.bottom - client.top);
+  int outer = static_cast<int>(height * scale + 0.5) + frame;
+  const int width = bounds.right - bounds.left;
+  int y = (bounds.top + bounds.bottom - outer) / 2;
+  MONITORINFO info = {};
+  info.cbSize = sizeof(info);
+  if (::GetMonitorInfoW(::MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+                        &info)) {
+    const RECT& work = info.rcWork;
+    outer = std::min(outer, static_cast<int>(work.bottom - work.top));
+    y = std::clamp(y, static_cast<int>(work.top),
+                   static_cast<int>(work.bottom) - outer);
+  }
+  if (outer == bounds.bottom - bounds.top && y == bounds.top) {
+    return;
+  }
+  ::SetWindowPos(window, nullptr, bounds.left, y, width, outer,
+                 SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+// ARGB, as Dart's Color, to a COLORREF.
+COLORREF ToColorRef(int64_t argb) {
+  return RGB((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+}
+
+// An int from Dart, which sends large ones as int64.
+std::optional<int64_t> GetInt(const flutter::EncodableValue& value) {
+  if (const auto* small = std::get_if<int32_t>(&value)) {
+    return *small;
+  }
+  if (const auto* large = std::get_if<int64_t>(&value)) {
+    return *large;
+  }
+  return std::nullopt;
+}
+
 // [left, top, right, bottom], or false.
 bool GetRect(const flutter::EncodableValue* value, RECT* rect) {
   const auto* list =
@@ -152,6 +210,40 @@ bool FlutterWindow::OnCreate() {
           ToFront(window);
           result->Success(
               flutter::EncodableValue(::GetForegroundWindow() == window));
+        } else if (call.method_name() == "fitHeight") {
+          const auto* height =
+              call.arguments() != nullptr
+                  ? std::get_if<double>(call.arguments())
+                  : nullptr;
+          if (height == nullptr || *height <= 0) {
+            result->Error("bad-arguments", "Expected a height");
+            return;
+          }
+          FitHeight(window, *height);
+          result->Success();
+        } else if (call.method_name() == "titleBarColors") {
+          const auto* list =
+              call.arguments() != nullptr
+                  ? std::get_if<flutter::EncodableList>(call.arguments())
+                  : nullptr;
+          const auto background =
+              list != nullptr && list->size() == 3 ? GetInt((*list)[0])
+                                                   : std::nullopt;
+          const auto text =
+              list != nullptr && list->size() == 3 ? GetInt((*list)[1])
+                                                   : std::nullopt;
+          const auto* dark =
+              list != nullptr && list->size() == 3
+                  ? std::get_if<bool>(&(*list)[2])
+                  : nullptr;
+          if (!background || !text || dark == nullptr) {
+            result->Error("bad-arguments", "Expected [background, text, dark]");
+            return;
+          }
+          title_bar_ = TitleBarColors{ToColorRef(*background),
+                                      ToColorRef(*text), *dark ? TRUE : FALSE};
+          ApplyTitleBar();
+          result->Success();
         } else {
           result->NotImplemented();
         }
@@ -164,6 +256,20 @@ bool FlutterWindow::OnCreate() {
   flutter_controller_->ForceRedraw();
 
   return true;
+}
+
+void FlutterWindow::ApplyTitleBar() {
+  if (!title_bar_) {
+    return;
+  }
+  const HWND window = GetHandle();
+  ::DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                          &title_bar_->dark, sizeof(title_bar_->dark));
+  ::DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR,
+                          &title_bar_->background,
+                          sizeof(title_bar_->background));
+  ::DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &title_bar_->text,
+                          sizeof(title_bar_->text));
 }
 
 void FlutterWindow::OnDestroy() {
@@ -215,5 +321,12 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       break;
   }
 
-  return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  const LRESULT result =
+      Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+  // Win32Window puts Windows' light or dark title bar back; the app's
+  // colors stay.
+  if (message == WM_DWMCOLORIZATIONCOLORCHANGED) {
+    ApplyTitleBar();
+  }
+  return result;
 }
