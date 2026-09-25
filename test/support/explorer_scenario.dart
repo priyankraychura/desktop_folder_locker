@@ -116,4 +116,6 @@ Future<void> unlockInDialog(WidgetTester tester) async {
   await tester.enterText(find.byType(TextField), masterPassword);
   await tester.tap(find.text('Unlock'));
   await settleReal(tester, rounds: 20);
+  // Until the dialog closes: the runners can take longer to unlock.
+  await settleUntil(tester, () => find.byType(TextField).evaluate().isEmpty);
 }

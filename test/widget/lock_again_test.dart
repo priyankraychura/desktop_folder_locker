@@ -41,6 +41,7 @@ void main() {
     await tester.pumpWidget(app.app);
     await settleReal(tester);
     await unlockInDialog(tester);
+    await settleUntil(tester, () => !app.window.visible);
     expect(app.window.visible, isFalse);
     return app;
   }
