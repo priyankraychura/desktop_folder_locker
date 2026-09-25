@@ -11,7 +11,7 @@ The identity comes from Partner Center (Product identity), for example:
 
 pwsh installer\msix\build-msix.ps1 -Source build\windows\x64\runner\Release `
     -Name 'PriyankRaychura.Cloak' -Publisher 'CN=00000000-0000-0000-0000-000000000000' `
-    -PublisherDisplayName 'Priyank Raychura' -Version 1.3.7 -Destination build\msix
+    -PublisherDisplayName 'Priyank Raychura' -Version 1.3.8 -Destination build\msix
 
 Writes Cloak-<version>.msix to the destination and outputs its path.
 #>
@@ -21,7 +21,7 @@ param(
     [Parameter(Mandatory)] [string] $Name,
     [Parameter(Mandatory)] [string] $Publisher,
     [Parameter(Mandatory)] [string] $PublisherDisplayName,
-    # The app's version, like 1.3.7.
+    # The app's version, like 1.3.8.
     [Parameter(Mandatory)] [string] $Version,
     [Parameter(Mandatory)] [string] $Destination,
     [string] $Certificate,

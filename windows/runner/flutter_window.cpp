@@ -134,11 +134,12 @@ COLORREF ToColorRef(int64_t argb) {
 
 // An int from Dart, which sends large ones as int64.
 std::optional<int64_t> GetInt(const flutter::EncodableValue& value) {
-  if (const auto* small = std::get_if<int32_t>(&value)) {
-    return *small;
+  // Not "small": the Windows headers make it a macro.
+  if (const auto* int32 = std::get_if<int32_t>(&value)) {
+    return *int32;
   }
-  if (const auto* large = std::get_if<int64_t>(&value)) {
-    return *large;
+  if (const auto* int64 = std::get_if<int64_t>(&value)) {
+    return *int64;
   }
   return std::nullopt;
 }

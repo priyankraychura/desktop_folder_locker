@@ -62,7 +62,10 @@ void main() {
     expect(app.window.visible, isTrue);
 
     await tester.tap(find.text('Lock'));
-    await settleReal(tester, rounds: 20);
+    await settleUntil(
+      tester,
+      () => !Directory(folder).existsSync() && File('$folder.flk').existsSync(),
+    );
     expect(Directory(folder).existsSync(), isFalse);
     expect(File('$folder.flk').existsSync(), isTrue);
     await settleUntil(tester, () => app.window.ended);
@@ -132,7 +135,10 @@ void main() {
     expect(lockApp.enabled, isFalse);
 
     app.tray.select('lockAll');
-    await settleReal(tester, rounds: 20);
+    await settleUntil(
+      tester,
+      () => File('${app.userPath('Taxes')}.flk').existsSync(),
+    );
     expect(File('${app.userPath('Taxes')}.flk').existsSync(), isTrue);
     expect(find.byType(Dialog), findsNothing, reason: 'nothing to ask');
     await settleUntil(tester, () => app.window.ended);
@@ -157,7 +163,11 @@ void main() {
       expect(find.text('Master password'), findsNothing, reason: 'keys kept');
 
       await tester.tap(find.text('Lock'));
-      await settleReal(tester, rounds: 20);
+      await settleUntil(
+        tester,
+        () =>
+            !Directory(folder).existsSync() && File('$folder.flk').existsSync(),
+      );
       expect(Directory(folder).existsSync(), isFalse);
       expect(File('$folder.flk').existsSync(), isTrue);
       await settleUntil(tester, () => app.window.ended);
@@ -215,7 +225,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), masterPassword);
       await tester.tap(find.text('Lock'));
-      await settleReal(tester, rounds: 20);
+      await settleUntil(tester, () => File('$folder.flk').existsSync());
       expect(File('$folder.flk').existsSync(), isTrue);
       await settleUntil(tester, () => app.window.ended);
       expect(app.window.ended, isTrue);
@@ -237,7 +247,10 @@ void main() {
       expect(find.text('You closed it in Explorer.'), findsNothing);
       await tester.enterText(find.byType(TextField), masterPassword);
       await tester.tap(find.text('Lock'));
-      await settleReal(tester, rounds: 20);
+      await settleUntil(
+        tester,
+        () => File('${app.userPath('Photos')}.flk').existsSync(),
+      );
       expect(File('${app.userPath('Photos')}.flk').existsSync(), isTrue);
       await settleUntil(tester, () => app.window.ended);
       expect(app.window.ended, isTrue);
@@ -269,7 +282,7 @@ void main() {
     expect(find.text('Lock “Taxes” again?'), findsOneWidget);
 
     await tester.tap(find.text('Lock'));
-    await settleReal(tester, rounds: 20);
+    await settleUntil(tester, () => File('$folder.flk').existsSync());
     expect(File('$folder.flk').existsSync(), isTrue);
     await settleUntil(tester, () => app.window.ended);
     expect(app.window.ended, isTrue, reason: 'nothing left to look after');
