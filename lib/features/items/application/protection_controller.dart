@@ -152,6 +152,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
     appDataDir: ref.read(appPathsProvider).root,
     executableDir: p.dirname(ref.read(executablePathProvider)),
     environment: ref.read(environmentProvider),
+    userFolders: ref.read(userFoldersProvider),
   );
 
   /// `null` if [path] may be protected.
@@ -620,6 +621,15 @@ class ProtectionController extends Notifier<ActiveOperation?> {
 
   static const int _hiddenBits = FileSystemInfo.hidden | FileSystemInfo.system;
 
+  /// The bits to clear to show [path] again. A folder with a `desktop.ini`
+  /// (a custom icon, or a translated name like Windows' own folders) may
+  /// need System to use it, so it keeps System: without Hidden it still
+  /// shows.
+  static int _bitsToShow(String path) =>
+      FsUtils.isDirectory(path) && FsUtils.exists(p.join(path, 'desktop.ini'))
+      ? FileSystemInfo.hidden
+      : _hiddenBits;
+
   Future<ProtectedItem> _protect(
     ProtectedItem item, {
     String? customPassword,
@@ -688,7 +698,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
       }
       if (undone) {
         if (item.hide) {
-          FileSystemInfo.updateAttributes(path, remove: _hiddenBits);
+          FileSystemInfo.updateAttributes(path, remove: _bitsToShow(path));
         }
         await _items.upsert(item);
       }
@@ -707,7 +717,7 @@ class ProtectionController extends Notifier<ActiveOperation?> {
   void _setHidden(String path, {required bool hidden}) {
     final ok = hidden
         ? FileSystemInfo.updateAttributes(path, add: _hiddenBits)
-        : FileSystemInfo.updateAttributes(path, remove: _hiddenBits);
+        : FileSystemInfo.updateAttributes(path, remove: _bitsToShow(path));
     if (!ok) throw const ProtectionException(ProtectionIssue.hideFailed);
   }
 

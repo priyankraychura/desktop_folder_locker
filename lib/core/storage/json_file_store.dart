@@ -5,12 +5,25 @@ import 'dart:io';
 /// Reads and writes one JSON document, crash-safely.
 ///
 /// A write goes to `file.tmp` first (flushed to disk), the previous version
-/// is kept as `file.bak`, then the temp file replaces the original. If the
-/// main file is missing or damaged, [read] falls back to the backup.
+/// is copied to `file.bak`, then the temp file replaces the original in one
+/// step. The file is never missing, not even for a moment: the Explorer
+/// plug-in reads `items.json` as soon as it changes. If the main file is
+/// damaged, [read] falls back to the backup.
 class JsonFileStore {
-  JsonFileStore(this.path);
+  JsonFileStore(
+    this.path, {
+    this.retryDelay = const Duration(milliseconds: 50),
+  });
 
   final String path;
+
+  /// How long to wait before trying again when another program (an
+  /// antivirus, the search indexer, a backup tool) briefly holds the file;
+  /// longer each time.
+  final Duration retryDelay;
+
+  static const int _attempts = 5;
+
   Future<void> _queue = Future.value();
 
   String get _backupPath => '$path.bak';
@@ -42,11 +55,27 @@ class JsonFileStore {
     final encoded = const JsonEncoder.withIndent('  ').convert(data);
     final temp = File(_tempPath);
     await temp.parent.create(recursive: true);
-    await temp.writeAsString(encoded, flush: true);
+    await _retry(() => temp.writeAsString(encoded, flush: true));
     final current = File(path);
     if (current.existsSync()) {
-      await current.rename(_backupPath);
+      try {
+        await _retry(() => current.copy(_backupPath));
+      } on FileSystemException {
+        // The backup is a safety net: the older one stays.
+      }
     }
-    await temp.rename(path);
+    // Replaces the file in one step (MoveFileEx with REPLACE_EXISTING).
+    await _retry(() => temp.rename(path));
+  }
+
+  Future<T> _retry<T>(Future<T> Function() action) async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        return await action();
+      } on FileSystemException {
+        if (attempt >= _attempts) rethrow;
+        await Future<void>.delayed(retryDelay * attempt);
+      }
+    }
   }
 }

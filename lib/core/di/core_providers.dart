@@ -12,6 +12,7 @@ import '../../platform/access_control.dart';
 import '../../platform/dokany_setup.dart';
 import '../../platform/explorer_folders.dart';
 import '../../platform/system_tray.dart';
+import '../../platform/user_folders.dart';
 import '../storage/app_paths.dart';
 
 /// App folder locations. Overridden in `bootstrap()` (and in tests).
@@ -43,6 +44,10 @@ final storeAppProvider = Provider<bool>((ref) => false);
 final environmentProvider = Provider<Map<String, String>>(
   (ref) => Platform.environment,
 );
+
+/// The user's main folders wherever they really are, and every account's
+/// profile folder (see [UserFolders]): they must not be locked.
+final userFoldersProvider = Provider<List<String>>((ref) => UserFolders.find());
 
 /// Whether the app runs in a real desktop window it controls (custom title
 /// bar, close confirmation). Overridden to `true` in `bootstrap()`; widget

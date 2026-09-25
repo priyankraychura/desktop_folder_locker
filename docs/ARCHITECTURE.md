@@ -333,12 +333,15 @@ These methods leave the item in place and add one Windows permission entry
     a file in use is retried after 5 minutes.
   - It reports items that have been unlocked longer than the reminder time,
     once per unlock.
-- `FolderWindowWatcher` asks Explorer every 2 seconds which folders its
-  windows and tabs show (through the plug-in, section 7), while a folder
-  is unlocked or a drive open. An item that a window showed (it, or a
-  folder inside it), and that no window shows any more, closed or
-  navigated away from, gets the question "Lock it again?", once until it
-  shows again. "Ask when I close them" in Settings turns this off.
+- `FolderWindowWatcher` knows which folders Explorer's windows and tabs
+  show: Explorer tells each change as it happens (the Explorer watcher,
+  section 7). An item that a window showed (it, or a folder inside it),
+  and that no window shows any more, closed or navigated away from, gets
+  the question "Lock it again?" right away, once until it shows again.
+  Like Explorer's own question would, it shows in front, over the window
+  that closed. Where Explorer can't be watched, the watcher asks it every
+  2 seconds instead (through the plug-in, section 7), never both. "Ask
+  when I close them" in Settings turns this off.
 - Items unlocked with a typed password lock again without it: their key
   stays in memory while they're unlocked (`ItemKeyCache`), even while the
   app is locked. Locking the app wipes these keys, so an item unlocked
@@ -411,10 +414,15 @@ removes the old app's files and shortcuts when it updates it.
 JSON files are written safely, so a crash never leaves half a file:
 
 1. The app writes `file.tmp` and flushes it to disk.
-2. It keeps the previous version as `file.bak`.
-3. It renames the temp file into place.
+2. It copies the previous version to `file.bak`.
+3. It renames the temp file over the original, in one step. The file is
+   never missing, not even for a moment: the Explorer plug-in reads
+   `items.json` as soon as it changes, and would otherwise see an empty
+   list.
 
-If the main file is missing or damaged, the app reads the backup.
+When another program (an antivirus, the search indexer) briefly holds the
+file, each step is tried again a few times. If the main file is damaged,
+the app reads the backup.
 
 The vaults themselves are self-contained. If `items.json` is lost, you can
 still open any vault by double-clicking it and typing its password or the
@@ -485,7 +493,8 @@ recovery key.
   `CloakShownFolders` lists the folders that Explorer windows and
   tabs show (`IShellWindows`, and each window's current folder as a file
   system path). Each call asks Explorer's process, so the app makes it in
-  another isolate, one at a time (`NativeExplorerFolders`).
+  another isolate, one at a time (`NativeExplorerFolders`). The app
+  only does that where it can't watch Explorer (next item).
 
   Windows 11's first menu level only shows commands from packages. The
   Windows 11 menu package (`installer/sparse`) is a package with external
@@ -512,6 +521,27 @@ recovery key.
   through FFI). Explorer's default settings then hide the item.
 - **Block access / Read-only** use `GetNamedSecurityInfoW` and
   `SetNamedSecurityInfoW` (section 5.1).
+- **Explorer watcher** (`windows/runner/explorer_watcher.cpp`). Tells
+  Dart which folders Explorer shows as soon as that changes, over the
+  `cloak/explorer` method channel (`watch`, then `changed` with the
+  folders and where the window whose change it was is on the screen).
+  It listens to Explorer's events rather than asking again and again:
+  ShellWindows' (`DShellWindowsEvents`: a window or tab opened or closed)
+  and each window's own (`DWebBrowserEvents2`: it went to another folder,
+  or quit). A window that quits is gone from the list at once. This is
+  the same signal Explorer add-ons get, from outside Explorer: nothing
+  of the app runs in Explorer's process for it, and it needs no
+  administrator rights and no Explorer restart. It runs on a thread of
+  its own, so a busy Explorer never holds up the app's window. Every 5
+  seconds it looks again, in case an event went missing, and connects
+  again after Explorer restarted. An Explorer that went away closes no
+  folder.
+
+  The question then shows over the Explorer window that closed, in front
+  (`cloak/window`: `placeOver` and `toFront`). Windows lets only the app
+  the user works with bring a window forward, so the runner borrows its
+  input for a moment (`AttachThreadInput`); if Windows still refuses, the
+  window goes on top of the others and flashes in the taskbar.
 - **Notification-area icon** (`windows/runner/tray_icon.cpp`). Dart drives
   it over the `cloak/tray` method channel:
   - `show` sets the tooltip, the "items unlocked" icon and the menu;

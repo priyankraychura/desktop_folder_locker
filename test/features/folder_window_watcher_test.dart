@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:desktop_folder_locker/features/auth/application/session_controller.dart';
 import 'package:desktop_folder_locker/features/items/application/folder_window_watcher.dart';
@@ -14,6 +15,13 @@ import '../support/app_harness.dart';
 
 /// Rounds run only when a test says so.
 final _watcherProvider = Provider<FolderWindowWatcher>((ref) {
+  final watcher = FolderWindowWatcher(ref, interval: const Duration(hours: 1));
+  ref.onDispose(watcher.dispose);
+  return watcher;
+});
+
+/// The same, made after the test says whether Explorer tells changes.
+final _watchingProvider = Provider<FolderWindowWatcher>((ref) {
   final watcher = FolderWindowWatcher(ref, interval: const Duration(hours: 1));
   ref.onDispose(watcher.dispose);
   return watcher;
@@ -42,7 +50,7 @@ void main() {
         .finishOnboarding();
     watcher = harness.container.read(_watcherProvider);
     closed = [];
-    watcher.closed.listen((item) => closed.add(item.name));
+    watcher.closed.listen((event) => closed.add(event.item.name));
   });
 
   tearDown(() async {
@@ -129,6 +137,78 @@ void main() {
     await protection().lockAgain(taxes);
     await explorerShows([]);
     expect(closed, isEmpty);
+  });
+
+  group('as Explorer tells it', () {
+    late FolderWindowWatcher watching;
+    late List<(String, Rect?)> reported;
+
+    setUp(() {
+      harness.explorer.watches = true;
+      watching = harness.container.read(_watchingProvider);
+      reported = [];
+      watching.closed.listen(
+        (event) => reported.add((event.item.name, event.window)),
+      );
+    });
+
+    /// Explorer tells that it shows [folders] now, after a change in
+    /// [window].
+    Future<void> change(List<String> folders, {Rect? window}) async {
+      harness.explorer.change(folders, window: window);
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    test('reports a folder as its window closes, with where it was', () async {
+      final taxes = await unlocked('Taxes');
+      const window = Rect.fromLTRB(100, 80, 900, 700);
+
+      await change([taxes.itemPath]);
+      expect(reported, isEmpty);
+      await change([], window: window);
+      expect(reported, [('Taxes', window)]);
+      await change([]);
+      expect(reported, hasLength(1), reason: 'once, until it opens again');
+    });
+
+    test('going to another folder in the window counts too', () async {
+      final taxes = await unlocked('Taxes');
+
+      await change([p.join(taxes.itemPath, '2024')]);
+      await change([p.dirname(taxes.itemPath)]);
+      expect(reported.map((r) => r.$1), ['Taxes']);
+    });
+
+    test('a folder that showed before it was unlocked counts', () async {
+      final folder = harness.userPath('Taxes');
+      await change([folder]);
+      await unlocked('Taxes');
+      await Future<void>.delayed(Duration.zero);
+
+      await change([]);
+      expect(reported.map((r) => r.$1), ['Taxes']);
+    });
+
+    test('never asks Explorer itself', () async {
+      final taxes = await unlocked('Taxes');
+      await change([taxes.itemPath]);
+
+      harness.explorer.folders = [];
+      await watching.check();
+      expect(reported, isEmpty);
+    });
+
+    test('asks Explorer again once watching stops working', () async {
+      final taxes = await unlocked('Taxes');
+      await change([taxes.itemPath]);
+      await harness.explorer.stopWatching();
+      await Future<void>.delayed(Duration.zero);
+
+      harness.explorer.folders = [];
+      await watching.check();
+      await Future<void>.delayed(Duration.zero);
+      expect(reported.map((r) => r.$1), ['Taxes']);
+    });
   });
 
   test('nothing with the setting off', () async {

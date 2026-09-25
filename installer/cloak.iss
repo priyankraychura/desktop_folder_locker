@@ -325,6 +325,8 @@ begin
     '- Encrypted drives (.flkd folders) stay encrypted too.' + #13#10 +
     '- Blocked and read-only items stay protected. Unlock them first, or ' +
     'install {#AppName} again to unlock them.' + #13#10 +
+    '- Hidden items stay hidden. Show them first, or install {#AppName} ' +
+    'again to show them.' + #13#10 +
     '- Unlocked items stay normal folders and files.' + #13#10 +
     '- Your settings in %APPDATA%\FolderLocker are kept.' + #13#10 +
     '- Dokany stays installed, as other apps may use it. You can remove it ' +

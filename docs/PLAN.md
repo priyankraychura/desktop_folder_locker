@@ -111,7 +111,7 @@ that are left unlocked.
 | 1.1b | Notification-area icon | Native tray icon in the Windows runner: menu (open, lock the unlocked items, lock app, quit), amber icon while items are unlocked, keeps running when the window is closed while items are unlocked, and quits once everything is locked | 🧪 |
 | 1.1c | Reminders and automatic re-locking | A notification when items stay unlocked; lock them again after N minutes; lock them when the app locks | ✅ |
 | 1.1d | New recovery key | Shown once and confirmed; every vault is re-sealed crash-safely; vaults that could not be reached are finished after the next unlock | ✅ |
-| 1.1e | Ask to lock when closed | When the last Explorer window of an unlocked folder (or drive) closes, a small dialog asks to lock it again; the app lists Explorer's windows through the Explorer plug-in | ✅ logic, UI and a real Explorer window in CI · 🧪 on a real PC |
+| 1.1e | Ask to lock when closed | When the last Explorer window of an unlocked folder (or drive) closes, a small dialog asks to lock it again, right away and over the window that closed; the app hears Explorer's window events | ✅ logic, UI and a real Explorer window in CI · 🧪 on a real PC |
 
 **Limits of Block access and Read-only**
 

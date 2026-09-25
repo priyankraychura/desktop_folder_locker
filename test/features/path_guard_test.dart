@@ -93,6 +93,31 @@ void main() {
     expect(guard.check(dir('Users/me/Documents/Taxes'), []), isNull);
   });
 
+  test('refuses moved user folders and other accounts, not their contents', () {
+    final guard = PathGuard(
+      appDataDir: dir('AppData/Roaming/FolderLocker'),
+      executableDir: dir('Program Files/Cloak'),
+      environment: const {},
+      // Documents moved to another drive, and another account's profile.
+      userFolders: [dir('D/My Documents'), dir('Users/someone')],
+    );
+    expect(guard.check(dir('D/My Documents'), []), PathProblem.userFolderRoot);
+    expect(guard.check(dir('D'), []), PathProblem.userFolderRoot);
+    expect(guard.check(dir('Users/someone'), []), PathProblem.userFolderRoot);
+    expect(guard.check(dir('D/My Documents/Taxes'), []), isNull);
+    expect(guard.check(dir('E/Projects'), []), isNull);
+  });
+
+  test('refuses anything in a drive\'s recycle bin or restore points', () {
+    final drive = p.rootPrefix(root.path);
+    for (final folder in [r'$Recycle.Bin', 'System Volume Information']) {
+      final inside = p.join(drive, folder, 'S-1-5-21', r'$R0AB12C');
+      expect(guard.check(inside, []), PathProblem.systemLocation);
+    }
+    // Only at the top of a drive: a folder of that name elsewhere is fine.
+    expect(guard.check(dir('D/Recovery/Photos'), []), isNull);
+  });
+
   test('refuses overlaps with items already in the list', () {
     final secret = dir('D/Secret');
     final items = [item(secret)];
