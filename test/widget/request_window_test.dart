@@ -56,6 +56,7 @@ void main() {
     await settleReal(tester);
     await tester.tap(find.text('Cancel'));
     await settleReal(tester);
+    await settleUntil(tester, () => app.window.ended);
     expect(app.window.ended, isTrue);
     expect(app.tray.visible, isFalse, reason: 'not even for a moment');
     expect(File(vault).existsSync(), isTrue, reason: 'still locked');
@@ -75,6 +76,7 @@ void main() {
     expect(find.text('“Moved.flk” is gone'), findsOneWidget);
     await tester.tap(find.text('OK'));
     await settleReal(tester);
+    await settleUntil(tester, () => app.window.ended);
     expect(app.window.ended, isTrue);
 
     await app.shutdown(tester);
@@ -139,6 +141,7 @@ void main() {
       await settleReal(tester);
       await unlockInDialog(tester);
       expect(Directory(app.userPath('Taxes')).existsSync(), isTrue);
+      await settleUntil(tester, () => app.window.ended);
       expect(app.window.ended, isTrue, reason: 'nothing to remind from');
 
       await app.shutdown(tester);

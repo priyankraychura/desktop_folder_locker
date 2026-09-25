@@ -158,6 +158,20 @@ Future<void> settleReal(WidgetTester tester, {int rounds = 12}) async {
   await tester.pump(const Duration(milliseconds: 600));
 }
 
+/// Lets real work go on until [done] holds, as [settleReal] does, for up to
+/// about [maxSeconds]: the Windows runners can take longer than a PC to
+/// lock a folder and let the app end.
+Future<void> settleUntil(
+  WidgetTester tester,
+  bool Function() done, {
+  int maxSeconds = 15,
+}) async {
+  // settleReal(rounds: 2) lets about a quarter of a second pass.
+  for (var i = 0; i < maxSeconds * 4 && !done(); i++) {
+    await settleReal(tester, rounds: 2);
+  }
+}
+
 /// Loads real fonts so screenshots show text instead of boxes.
 Future<void> loadTestFonts() async {
   final fonts = _materialFontsDir();

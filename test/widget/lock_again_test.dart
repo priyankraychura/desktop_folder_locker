@@ -61,6 +61,7 @@ void main() {
     await settleReal(tester, rounds: 20);
     expect(Directory(folder).existsSync(), isFalse);
     expect(File('$folder.flk').existsSync(), isTrue);
+    await settleUntil(tester, () => app.window.ended);
     expect(app.window.ended, isTrue, reason: 'nothing left to look after');
 
     await app.shutdown(tester);
@@ -105,6 +106,7 @@ void main() {
     await settleReal(tester, rounds: 20);
     expect(File('${app.userPath('Taxes')}.flk').existsSync(), isTrue);
     expect(find.byType(Dialog), findsNothing, reason: 'nothing to ask');
+    await settleUntil(tester, () => app.window.ended);
     expect(app.window.ended, isTrue, reason: 'nothing left to look after');
 
     await app.shutdown(tester);
@@ -133,6 +135,7 @@ void main() {
       await tester.tap(find.text('Lock'));
       await settleReal(tester, rounds: 20);
       expect(File('$folder.flk').existsSync(), isTrue);
+      await settleUntil(tester, () => app.window.ended);
       expect(app.window.ended, isTrue);
 
       await app.shutdown(tester);
@@ -154,6 +157,7 @@ void main() {
       await tester.tap(find.text('Lock'));
       await settleReal(tester, rounds: 20);
       expect(File('${app.userPath('Photos')}.flk').existsSync(), isTrue);
+      await settleUntil(tester, () => app.window.ended);
       expect(app.window.ended, isTrue);
 
       await app.shutdown(tester);
