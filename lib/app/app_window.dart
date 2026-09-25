@@ -206,6 +206,18 @@ abstract interface class AppWindow {
   /// Changes the look, without bringing the window forward.
   Future<void> restyle({required bool compact});
 
+  /// The compact window gives its content that [height] (logical pixels),
+  /// now or once it's compact.
+  Future<void> fitHeight(double height);
+
+  /// Colors Windows' title bar of the compact window like the page under
+  /// it: [background], [text], and [dark] buttons or light ones.
+  Future<void> colorTitleBar({
+    required Color background,
+    required Color text,
+    required bool dark,
+  });
+
   Future<void> hide();
 
   Future<bool> isVisible();
@@ -223,6 +235,16 @@ class NoAppWindow implements AppWindow {
 
   @override
   Future<void> restyle({required bool compact}) async {}
+
+  @override
+  Future<void> fitHeight(double height) async {}
+
+  @override
+  Future<void> colorTitleBar({
+    required Color background,
+    required Color text,
+    required bool dark,
+  }) async {}
 
   @override
   Future<void> hide() async {}
@@ -244,8 +266,11 @@ class NativeAppWindow with WindowListener implements AppWindow {
   static const Size appMinimumSize = Size(940, 640);
 
   /// A dialog (480 wide, with its margins) or the lock screen's form, and
-  /// Windows' title bar.
+  /// Windows' title bar. Its height then fits what it shows.
   static const Size compactSize = Size(560, 540);
+
+  /// Low enough for the height to fit a short dialog.
+  static const Size compactMinimumSize = Size(560, 160);
 
   /// The look the window has, and the one it should have: a minimized
   /// window changes when it's restored.
@@ -259,6 +284,9 @@ class NativeAppWindow with WindowListener implements AppWindow {
   Rect? _appBounds;
   bool _appMaximized = false;
 
+  /// The height the compact window's content needs, once told.
+  double? _fitHeight;
+
   /// Connects to the window. It's set up and shown once the first frame is
   /// ready.
   Future<void> start() async {
@@ -268,13 +296,16 @@ class NativeAppWindow with WindowListener implements AppWindow {
       WindowOptions(
         title: AppInfo.name,
         size: _compact ? compactSize : appSize,
-        minimumSize: _compact ? compactSize : appMinimumSize,
+        minimumSize: _compact ? compactMinimumSize : appMinimumSize,
         center: true,
         titleBarStyle: _compact ? TitleBarStyle.normal : TitleBarStyle.hidden,
         windowButtonVisibility: false,
       ),
       () async {
-        if (_compact) await _fixed(true);
+        if (_compact) {
+          await _fixed(true);
+          await _fit();
+        }
         await _front();
         _ready.complete();
       },
@@ -305,6 +336,30 @@ class NativeAppWindow with WindowListener implements AppWindow {
   }
 
   @override
+  Future<void> fitHeight(double height) {
+    _fitHeight = height;
+    final change = _changes.then((_) async {
+      if (!_ready.isCompleted || !_compact) return;
+      await _fit();
+    });
+    _changes = change.then((_) {}, onError: (_) {});
+    return change;
+  }
+
+  Future<void> _fit() async {
+    final height = _fitHeight;
+    if (height != null) await _native('fitHeight', height);
+  }
+
+  @override
+  Future<void> colorTitleBar({
+    required Color background,
+    required Color text,
+    required bool dark,
+  }) =>
+      _native('titleBarColors', [background.toARGB32(), text.toARGB32(), dark]);
+
+  @override
   void onWindowRestore() => unawaited(_apply());
 
   /// Gives the window the look it should have, one change at a time.
@@ -318,11 +373,12 @@ class NativeAppWindow with WindowListener implements AppWindow {
         if (_appMaximized) await windowManager.unmaximize();
         _appBounds = await windowManager.getBounds();
         // The smaller minimum first, or Windows keeps the window large.
-        await windowManager.setMinimumSize(compactSize);
+        await windowManager.setMinimumSize(compactMinimumSize);
         await _fixed(true);
         await windowManager.setTitleBarStyle(TitleBarStyle.normal);
         await windowManager.setSize(compactSize);
         await windowManager.center();
+        await _fit();
       } else {
         await _fixed(false);
         await windowManager.setMinimumSize(appMinimumSize);

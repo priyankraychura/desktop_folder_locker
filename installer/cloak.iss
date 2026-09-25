@@ -6,7 +6,7 @@
 ;   cargo build --release -p cloak-drive -p cloak-shell   (in native\)
 ;   flutter build windows --release                  (copies both next to the app)
 ;   pwsh installer\get-dokany.ps1 -Destination build\windows\x64\runner\Release\dokany
-;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.3 installer\cloak.iss
+;   "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" /DAppVersion=1.3.7 installer\cloak.iss
 ;
 ; The installer is written to build\installer. CI does all of this (see
 ; .github/workflows/ci.yml). Without the Dokany step, the installer links to
@@ -20,6 +20,9 @@
 ; both in sync.
 
 #define AppName "Cloak"
+; How Windows lists the app: the Start menu, the desktop and Installed apps.
+; Elsewhere it's just AppName ("Lock with Cloak").
+#define AppDisplayName "Cloak - Lock & Encrypt Folders"
 #define AppExeName "cloak.exe"
 #define AppPublisher "Priyank Raychura"
 #define AppUrl "https://github.com/priyankraychura/desktop_folder_locker"
@@ -54,7 +57,7 @@
 #endif
 
 #ifndef AppVersion
-  #define AppVersion "1.3.3"
+  #define AppVersion "1.3.7"
 #endif
 
 [Setup]
@@ -85,7 +88,7 @@ OutputDir=..\build\installer
 OutputBaseFilename=Cloak-Setup-{#AppVersion}
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\{#AppExeName}
-UninstallDisplayName={#AppName}
+UninstallDisplayName={#AppDisplayName}
 WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
@@ -119,8 +122,8 @@ Source: "{#BuildDir}\{#ShellDll}"; DestDir: "{app}"; Flags: ignoreversion restar
 #endif
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autoprograms}\{#AppDisplayName}"; Filename: "{app}\{#AppExeName}"
+Name: "{autodesktop}\{#AppDisplayName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Registry]
 ; Per user (HKCU) in both install modes, like the app writes them: the
@@ -170,6 +173,9 @@ Type: files; Name: "{app}\{#OldExeName}"
 Type: files; Name: "{app}\{#OldHelperName}"
 Type: files; Name: "{autoprograms}\{#OldAppName}.lnk"
 Type: files; Name: "{autodesktop}\{#OldAppName}.lnk"
+; The shortcuts before they had the full name.
+Type: files; Name: "{autoprograms}\{#AppName}.lnk"
+Type: files; Name: "{autodesktop}\{#AppName}.lnk"
 
 [UninstallDelete]
 Type: files; Name: "{app}\*.old"

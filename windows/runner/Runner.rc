@@ -94,7 +94,7 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "Priyank Raychura" "\0"
-            VALUE "FileDescription", "Cloak" "\0"
+            VALUE "FileDescription", "Cloak - Lock & Encrypt Folders" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "cloak" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 Priyank Raychura" "\0"

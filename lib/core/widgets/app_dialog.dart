@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'icon_tile.dart';
+import 'window_fit.dart';
 
 /// Shared layout for every dialog: icon, title, optional subtitle, body
 /// and right-aligned actions.
@@ -29,49 +30,54 @@ class AppDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Header and actions stay visible; only the content scrolls when the
-    // window is short.
+    // window is short. The compact window fits the dialog.
     return Dialog(
-      insetPadding: const EdgeInsets.all(AppSpacing.xl),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: width),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
-                AppSpacing.xl,
-                AppSpacing.xl,
-                0,
+      insetPadding: const EdgeInsets.all(_inset),
+      child: FitsWindow(
+        margin: 2 * _inset,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: width),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                  0,
+                ),
+                child: _header(context),
               ),
-              child: _header(context),
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: content,
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: content,
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl,
-                0,
-                AppSpacing.xl,
-                AppSpacing.xl,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  0,
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                ),
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: actions,
+                ),
               ),
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: actions,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  static const double _inset = AppSpacing.xl;
 
   Widget _header(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,

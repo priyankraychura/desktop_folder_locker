@@ -8,6 +8,7 @@ import '../../../core/theme/app_tokens.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/buttons.dart';
 import '../../../core/widgets/password_field.dart';
+import '../../../core/widgets/window_fit.dart';
 import '../application/session_controller.dart';
 import 'password_dialogs.dart';
 
@@ -73,18 +74,22 @@ class _LockScreenState extends ConsumerState<LockScreen>
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(AppSpacing.xxl),
-              child: AnimatedBuilder(
-                animation: _shake,
-                builder: (context, child) {
-                  // A short, fading side-to-side shake.
-                  final t = _shake.value;
-                  final dx = math.sin(t * math.pi * 6) * 10 * (1 - t);
-                  return Transform.translate(
-                    offset: Offset(dx, 0),
-                    child: child,
-                  );
-                },
-                child: _form(context, hint),
+              // The compact window fits the form.
+              child: FitsWindow(
+                margin: 2 * AppSpacing.xxl,
+                child: AnimatedBuilder(
+                  animation: _shake,
+                  builder: (context, child) {
+                    // A short, fading side-to-side shake.
+                    final t = _shake.value;
+                    final dx = math.sin(t * math.pi * 6) * 10 * (1 - t);
+                    return Transform.translate(
+                      offset: Offset(dx, 0),
+                      child: child,
+                    );
+                  },
+                  child: _form(context, hint),
+                ),
               ),
             ),
           ),
