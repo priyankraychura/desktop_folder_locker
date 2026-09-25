@@ -28,11 +28,14 @@ void PlaceOver(HWND window, const RECT& area) {
     }
     const int width = bounds.right - bounds.left;
     const int height = bounds.bottom - bounds.top;
-    const int x = std::clamp((area.left + area.right - width) / 2,
+    // RECT's fields are LONG: std::clamp needs all three as int.
+    const int mid_x = static_cast<int>((area.left + area.right - width) / 2);
+    const int mid_y = static_cast<int>((area.top + area.bottom - height) / 2);
+    const int x = std::clamp(mid_x,
                              static_cast<int>(work.left),
                              std::max(static_cast<int>(work.left),
                                       static_cast<int>(work.right) - width));
-    const int y = std::clamp((area.top + area.bottom - height) / 2,
+    const int y = std::clamp(mid_y,
                              static_cast<int>(work.top),
                              std::max(static_cast<int>(work.top),
                                       static_cast<int>(work.bottom) - height));

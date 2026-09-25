@@ -58,7 +58,7 @@ void main() {
     expect(app.window.visible, isTrue);
 
     await tester.tap(find.text('Lock'));
-    await settleReal(tester, rounds: 20);
+    await settleUntil(tester, () => app.window.ended);
     expect(Directory(folder).existsSync(), isFalse);
     expect(File('$folder.flk').existsSync(), isTrue);
     expect(app.window.ended, isTrue, reason: 'nothing left to look after');
@@ -127,7 +127,7 @@ void main() {
     expect(lockApp.enabled, isFalse);
 
     app.tray.select('lockAll');
-    await settleReal(tester, rounds: 20);
+    await settleUntil(tester, () => app.window.ended);
     expect(File('${app.userPath('Taxes')}.flk').existsSync(), isTrue);
     expect(find.byType(Dialog), findsNothing, reason: 'nothing to ask');
     expect(app.window.ended, isTrue, reason: 'nothing left to look after');
@@ -156,7 +156,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), masterPassword);
       await tester.tap(find.text('Lock'));
-      await settleReal(tester, rounds: 20);
+      await settleUntil(tester, () => app.window.ended);
       expect(File('$folder.flk').existsSync(), isTrue);
       expect(app.window.ended, isTrue);
 
@@ -177,7 +177,7 @@ void main() {
       expect(find.text('You closed it in Explorer.'), findsNothing);
       await tester.enterText(find.byType(TextField), masterPassword);
       await tester.tap(find.text('Lock'));
-      await settleReal(tester, rounds: 20);
+      await settleUntil(tester, () => app.window.ended);
       expect(File('${app.userPath('Photos')}.flk').existsSync(), isTrue);
       expect(app.window.ended, isTrue);
 

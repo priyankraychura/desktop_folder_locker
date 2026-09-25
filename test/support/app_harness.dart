@@ -158,6 +158,21 @@ Future<void> settleReal(WidgetTester tester, {int rounds = 12}) async {
   await tester.pump(const Duration(milliseconds: 600));
 }
 
+/// Like [settleReal], but goes on until [condition] holds or [timeout] of
+/// real time has passed: for work that runs through several file writes,
+/// which a slow machine may not finish within a fixed number of rounds.
+Future<void> settleUntil(
+  WidgetTester tester,
+  bool Function() condition, {
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final stopwatch = Stopwatch()..start();
+  await settleReal(tester);
+  while (!condition() && stopwatch.elapsed < timeout) {
+    await settleReal(tester, rounds: 4);
+  }
+}
+
 /// Loads real fonts so screenshots show text instead of boxes.
 Future<void> loadTestFonts() async {
   final fonts = _materialFontsDir();
