@@ -76,7 +76,10 @@ void main() {
     expect(harness.accessRules.ruleOn(music.path), AccessRule.blockAll);
 
     intents.addArgs(['--unlock', harness.userPath('Photos')]);
-    await settleReal(tester);
+    await settleUntil(
+      tester,
+      () => find.text('“Photos” is not in your list.').evaluate().isNotEmpty,
+    );
     expect(find.text('“Photos” is not in your list.'), findsOneWidget);
 
     await harness.shutdown(tester);

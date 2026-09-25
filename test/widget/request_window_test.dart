@@ -171,7 +171,13 @@ void main() {
       await settleReal(tester);
       await tester.enterText(find.byType(TextField), masterPassword);
       await tester.tap(find.text('Open'));
-      await settleReal(tester, rounds: 20);
+      await settleUntil(
+        tester,
+        () =>
+            app.drives.isMounted(vault) &&
+            windowMode(app) == WindowMode.main &&
+            find.byType(LockScreen).evaluate().isNotEmpty,
+      );
       expect(app.drives.isMounted(vault), isTrue);
 
       // Hidden, it could only be found in Task Manager. The app is locked:

@@ -173,7 +173,10 @@ void main() {
       expect(trayEntry(app, 'lockAll').enabled, isTrue);
 
       app.tray.select('lockAll');
-      await settleReal(tester, rounds: 20);
+      await settleUntil(
+        tester,
+        () => File('${app.userPath('Photos')}.flk').existsSync(),
+      );
       expect(File('${app.userPath('Photos')}.flk').existsSync(), isTrue);
       expect(find.byType(Dialog), findsNothing, reason: 'nothing to ask');
 
