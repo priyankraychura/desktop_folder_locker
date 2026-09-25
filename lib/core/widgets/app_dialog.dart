@@ -10,8 +10,8 @@ import 'window_fit.dart';
 class AppDialog extends StatelessWidget {
   const AppDialog({
     required this.title,
-    required this.content,
     required this.actions,
+    this.content,
     super.key,
     this.icon,
     this.tone = Tone.primary,
@@ -23,7 +23,9 @@ class AppDialog extends StatelessWidget {
   final Tone tone;
   final String title;
   final String? subtitle;
-  final Widget content;
+
+  /// The body, if any: without one, the title (and subtitle) says it all.
+  final Widget? content;
   final List<Widget> actions;
   final double width;
 
@@ -50,12 +52,15 @@ class AppDialog extends StatelessWidget {
                 ),
                 child: _header(context),
               ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(AppSpacing.xl),
-                  child: content,
-                ),
-              ),
+              if (content case final content?)
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    child: content,
+                  ),
+                )
+              else
+                const SizedBox(height: AppSpacing.xl),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.xl,

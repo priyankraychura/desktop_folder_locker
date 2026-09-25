@@ -340,15 +340,17 @@ class NativeAppWindow with WindowListener implements AppWindow {
     _fitHeight = height;
     final change = _changes.then((_) async {
       if (!_ready.isCompleted || !_compact) return;
-      await _fit();
+      await _fit(glide: true);
     });
     _changes = change.then((_) {}, onError: (_) {});
     return change;
   }
 
-  Future<void> _fit() async {
+  /// Fits the compact window's height, at once when it just became
+  /// compact, or gliding there when what it shows changed.
+  Future<void> _fit({bool glide = false}) async {
     final height = _fitHeight;
-    if (height != null) await _native('fitHeight', height);
+    if (height != null) await _native('fitHeight', [height, glide]);
   }
 
   @override

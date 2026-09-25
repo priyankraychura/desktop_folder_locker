@@ -1,7 +1,9 @@
 name: CI
 
 on:
+  # Pushes to other branches are checked through their pull request.
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
