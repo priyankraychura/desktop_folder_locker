@@ -63,14 +63,24 @@ void main() {
     expect(find.text('Taxes'), findsOneWidget);
     expect(find.text('Locked'), findsWidgets);
 
+    // The card's button, once it can be pressed: it waits while an
+    // operation finishes (the Windows runners can be slow).
+    bool canPress(String label) {
+      final button = find.widgetWithText(FilledButton, label);
+      return button.evaluate().isNotEmpty &&
+          tester.widget<FilledButton>(button).onPressed != null;
+    }
+
     // The app is unlocked, so no password is asked.
     await tester.tap(find.widgetWithText(FilledButton, 'Unlock'));
     await settleReal(tester, rounds: 20);
+    await settleUntil(tester, () => canPress('Lock'));
     expect(Directory(folderPath).existsSync(), isTrue);
     expect(find.text('Unlocked'), findsWidgets);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Lock'));
     await settleReal(tester, rounds: 20);
+    await settleUntil(tester, () => canPress('Unlock'));
     expect(Directory(folderPath).existsSync(), isFalse);
     expect(File('$folderPath.flk').existsSync(), isTrue);
 
@@ -85,6 +95,7 @@ void main() {
     // Unlock again, then remove it (the folder stays where it is).
     await tester.tap(find.widgetWithText(FilledButton, 'Unlock'));
     await settleReal(tester, rounds: 20);
+    await settleUntil(tester, () => canPress('Lock'));
     await tester.tap(find.byTooltip('More'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(MenuItemButton, 'Remove from list'));
