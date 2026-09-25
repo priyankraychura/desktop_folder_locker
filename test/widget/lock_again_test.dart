@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:desktop_folder_locker/app/app_window.dart';
 import 'package:desktop_folder_locker/features/auth/presentation/lock_screen.dart';
 import 'package:desktop_folder_locker/features/items/application/folder_window_watcher.dart';
+import 'package:desktop_folder_locker/features/items/application/items_controller.dart';
+import 'package:desktop_folder_locker/features/items/application/protection_controller.dart';
 import 'package:desktop_folder_locker/features/settings/domain/app_settings.dart';
 import 'package:desktop_folder_locker/platform/system_tray.dart';
 import 'package:flutter/material.dart';
@@ -173,9 +175,16 @@ void main() {
       expect(trayEntry(app, 'lockAll').enabled, isTrue);
 
       app.tray.select('lockAll');
+      // Until locking is done, not just the vault written: the app ends
+      // with the test.
       await settleUntil(
         tester,
-        () => File('${app.userPath('Photos')}.flk').existsSync(),
+        () =>
+            app.container.read(protectionControllerProvider) == null &&
+            app.container
+                .read(itemsControllerProvider.notifier)
+                .items
+                .every((item) => item.isProtected),
       );
       expect(File('${app.userPath('Photos')}.flk').existsSync(), isTrue);
       expect(find.byType(Dialog), findsNothing, reason: 'nothing to ask');

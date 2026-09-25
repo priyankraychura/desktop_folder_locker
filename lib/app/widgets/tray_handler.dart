@@ -145,6 +145,7 @@ class _TrayHandlerState extends ConsumerState<TrayHandler> {
   Future<void> _lockAll() async {
     final protection = ref.read(protectionControllerProvider.notifier);
     final left = await protection.lockAllUnlocked();
+    if (!mounted) return;
     final needPassword = [
       for (final item in left)
         if (protection.lockRequirement(item) != LockRequirement.none) item,

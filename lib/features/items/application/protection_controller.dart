@@ -594,6 +594,8 @@ class ProtectionController extends Notifier<ActiveOperation?> {
   }) async {
     final left = <ProtectedItem>[];
     for (final listed in [..._items.items]) {
+      // The app quit meanwhile (it signed out, or an update closed it).
+      if (!ref.mounted) break;
       // The list changes as items are locked: always use the latest copy.
       final item = _items.byId(listed.id);
       if (item == null || item.isProtected || !_items.existsOnDisk(item)) {
