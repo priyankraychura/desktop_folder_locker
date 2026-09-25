@@ -65,7 +65,8 @@ $manifest = Get-Content -Raw (Join-Path $PSScriptRoot 'AppxManifest.xml')
 $manifest = $manifest.Replace('$NAME$', (& $escape $Name))
 $manifest = $manifest.Replace('$PUBLISHER_DISPLAY_NAME$', (& $escape $PublisherDisplayName))
 $manifest = $manifest.Replace('$PUBLISHER$', (& $escape $Publisher))
-# The Store wants the last part to be 0.
+# The Store keeps the last part for itself: it must be 0, so every Store
+# update needs a higher app version (pubspec.yaml), not just a new build.
 $manifest = $manifest.Replace('$VERSION$', "$Version.0")
 # UTF-8 without a byte order mark, in Windows PowerShell and PowerShell 7.
 [IO.File]::WriteAllText((Join-Path $work 'AppxManifest.xml'), $manifest, [Text.UTF8Encoding]::new($false))

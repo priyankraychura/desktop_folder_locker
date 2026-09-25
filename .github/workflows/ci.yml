@@ -222,9 +222,9 @@ jobs:
 
       # For Partner Center: the Store package with the app's identity there
       # (Product identity), from the repository's variables. The Store signs
-      # it. Built once they are set.
+      # it. Built once all three are set.
       - name: Build the Store package for upload
-        if: ${{ vars.STORE_IDENTITY_NAME != '' }}
+        if: ${{ vars.STORE_IDENTITY_NAME != '' && vars.STORE_PUBLISHER != '' && vars.STORE_PUBLISHER_DISPLAY_NAME != '' }}
         shell: pwsh
         env:
           STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
@@ -238,7 +238,7 @@ jobs:
             -Destination build\msix
 
       - name: Upload the Store package
-        if: ${{ vars.STORE_IDENTITY_NAME != '' }}
+        if: ${{ vars.STORE_IDENTITY_NAME != '' && vars.STORE_PUBLISHER != '' && vars.STORE_PUBLISHER_DISPLAY_NAME != '' }}
         uses: actions/upload-artifact@v5
         with:
           name: cloak-store
